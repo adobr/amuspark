@@ -276,10 +276,10 @@ function beginStartScreen(){
   option.setAttribute('aria-label',`Level ${i+1}, ${i===currentLevel?'selected':i<currentLevel?'completed':'not yet available'}`);
  });
  status.textContent=`Level ${currentLevel+1} is selected.`;
- setTimeout(()=>{startScreen.hidden=true;document.body.classList.remove('starting');startIntro();},3000);
+ setTimeout(()=>{startScreen.hidden=true;document.body.classList.remove('starting');startIntro();},5000);
 }
 startScreen.hidden=true;songScreen.hidden=false;
-setTimeout(beginStartScreen,2000);
+setTimeout(beginStartScreen,5000);
 </script>
 </body>
 </html>
