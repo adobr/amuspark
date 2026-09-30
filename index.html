@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rail Drag and Drop</title>
+<style>
+:root{color-scheme:light;font-family:Arial,sans-serif;background:#f7f8fa}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:48px 40px}.workspace{width:min(1200px,100%)}.row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:36px}.tray{margin-top:48px}.cell{position:relative;aspect-ratio:1.48;min-width:0;border-radius:20px}.slot{background:#e9edf1;border:2px solid #b2bac4;transition:background .16s,border-color .16s,box-shadow .16s}.slot.over,.home.over{background:#e0eaf6;border:2px solid #7a9ec5;box-shadow:0 0 0 4px #729ac51c}.slot.filled{border-color:transparent;background:#e9edf1}.home{border:2px solid transparent}.home.empty{border:2px solid #e0e5eb;background:#f0f3f6}.card{position:absolute;inset:-2px;display:grid;place-items:center;width:calc(100% + 4px);height:calc(100% + 4px);padding:24px;border:2px solid #cdd4dd;border-radius:20px;background:#fff;box-shadow:0 5px 12px #27384d10;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;transition:transform .16s,border-color .16s,box-shadow .16s}.card svg{display:block;width:100%;max-height:100%;pointer-events:none}.card:hover{transform:translateY(-4px);border-color:#8dabc9;box-shadow:0 10px 20px #263b5418}.card:focus-visible,.cell:focus-visible{outline:3px solid #6897c8;outline-offset:5px}.slot .card{border-color:#aab8c8;box-shadow:none}.slot .card:hover,.slot .card.selected{box-shadow:none}.card.held{opacity:.16;transform:none;box-shadow:none}.card.selected{border-color:#6d9dcc;box-shadow:0 0 0 4px #6d9dcc26}.card.ghost{position:fixed;z-index:100;inset:auto;pointer-events:none;opacity:1;border-color:#729bc3;box-shadow:0 18px 32px #25364f28;transform:scale(1.045);transition:none;cursor:grabbing}.dragging,.dragging *{cursor:grabbing!important}.card.settled{animation:settle .22s ease-out}@keyframes settle{0%{transform:scale(1.035)}65%{transform:scale(.985)}100%{transform:scale(1)}}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}@media(max-width:700px){body{padding:30px 16px}.row{gap:16px}.tray{margin-top:32px}.cell{aspect-ratio:1}.card{padding:12px;border-radius:14px}.cell{border-radius:14px}}@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<main class="workspace" aria-label="Railway pieces drag-and-drop activity">
+<div class="row targets" aria-label="Answer slots"><div class="cell slot" data-location="0" tabindex="0" aria-label="Slot 1, empty"></div><div class="cell slot" data-location="1" tabindex="0" aria-label="Slot 2, empty"></div><div class="cell slot" data-location="2" tabindex="0" aria-label="Slot 3, empty"></div></div>
+<div class="row tray" aria-label="Railway pieces"><div class="cell home" data-location="3" tabindex="0" aria-label="Card position 1"></div><div class="cell home" data-location="4" tabindex="0" aria-label="Card position 2"></div><div class="cell home" data-location="5" tabindex="0" aria-label="Card position 3"></div></div>
+</main>
+<div class="sr-only" role="status" aria-live="polite" id="status"></div>
+<script>
+const sleepers = (positions)=>positions.map(([x,y,angle=0])=>`<rect x="${x}" y="${y}" width="22" height="112" rx="2" fill="#9b653d" transform="rotate(${angle} ${x+11} ${y+56})"/>`).join('');
+const icons=[
+ `<svg viewBox="0 0 320 190" aria-hidden="true">${sleepers([[40,39],[90,39],[140,39],[190,39],[240,39]])}<path d="M20 63H300M20 126H300" fill="none" stroke="#343a3e" stroke-width="14" stroke-linecap="square"/></svg>`,
+ `<svg viewBox="0 0 320 190" aria-hidden="true">${sleepers([[46,73,-28],[98,50,-22],[153,31,-16],[210,20,-10],[267,15,-5]])}<path d="M20 114Q150 42 300 42M45 168Q174 103 306 104" fill="none" stroke="#343a3e" stroke-width="14" stroke-linecap="square"/></svg>`,
+ `<svg viewBox="0 0 320 190" aria-hidden="true"><g fill="#9b653d"><rect x="28" y="55" width="20" height="90" rx="2"/><rect x="75" y="55" width="20" height="90" rx="2"/><rect x="120" y="50" width="20" height="102" rx="2"/><path d="m165 42 18-9 39 78-18 9Z"/><path d="m212 17 18-9 39 78-18 9Z"/><path d="m171 109 18 9-36 64-18-9Z"/><path d="m217 120 18 9-30 54-18-9Z"/><path d="m266 129 18 9-22 43-18-9Z"/></g><path d="M12 75h113Q161 75 204 51L281 13M12 130h109Q158 130 193 150l83 40M119 75q35 10 75 37l101 46M121 130q33-7 74-32l103-51" fill="none" stroke="#343a3e" stroke-width="12" stroke-linejoin="round"/></svg>`
+];
+const names=['Straight railway piece','Curved railway piece','Branching railway piece'];
+const cells=[...document.querySelectorAll('.cell')];
+let positions=[null,null,null,0,1,2], selected=null, drag=null, suppressClickUntil=0;
+const status=document.getElementById('status');
+function render(settled=null){
+ cells.forEach((cell,i)=>{
+  const id=positions[i];cell.classList.toggle('filled',id!==null);cell.classList.toggle('empty',id===null);
+  cell.setAttribute('aria-label',`${i<3?'Slot':'Card position'} ${i%3+1}, ${id===null?'empty':names[id]}`);
+  cell.innerHTML=id===null?'':`<button type="button" class="card${id===selected?' selected':''}${id===settled?' settled':''}" data-card="${id}" aria-label="${names[id]}. Drag to a slot, or press Enter then choose a slot." aria-pressed="${id===selected}">${icons[id]}</button>`;
+ });
+}
+function place(id,target){
+ const from=positions.indexOf(id);if(from<0||target===from)return;
+ const occupant=positions[target];positions[target]=id;positions[from]=occupant;
+ status.textContent=`${names[id]} moved to ${target<3?'slot':'card position'} ${target%3+1}${occupant!==null?'; the pieces swapped places':''}.`;
+}
+function clearOver(){cells.forEach(c=>c.classList.remove('over'));}
+function targetAt(x,y){const cell=document.elementFromPoint(x,y)?.closest('.cell');return cell?Number(cell.dataset.location):null;}
+document.addEventListener('pointerdown',e=>{
+ const card=e.target.closest('.card');if(!card||e.button!==0||drag)return;
+ const rect=card.getBoundingClientRect();
+ drag={id:Number(card.dataset.card),pointer:e.pointerId,card,startX:e.clientX,startY:e.clientY,offsetX:e.clientX-rect.left,offsetY:e.clientY-rect.top,rect,started:false,ghost:null,target:null};
+ card.setPointerCapture(e.pointerId);
+});
+document.addEventListener('pointermove',e=>{
+ if(!drag||e.pointerId!==drag.pointer)return;
+ if(!drag.started&&Math.hypot(e.clientX-drag.startX,e.clientY-drag.startY)<5)return;
+ e.preventDefault();
+ if(!drag.started){drag.started=true;selected=null;drag.card.classList.add('held');document.body.classList.add('dragging');const ghost=drag.card.cloneNode(true);ghost.className='card ghost';ghost.removeAttribute('data-card');ghost.removeAttribute('aria-pressed');ghost.setAttribute('aria-hidden','true');ghost.tabIndex=-1;ghost.style.width=drag.rect.width+'px';ghost.style.height=drag.rect.height+'px';document.body.appendChild(ghost);drag.ghost=ghost;}
+ drag.ghost.style.left=(e.clientX-drag.offsetX)+'px';drag.ghost.style.top=(e.clientY-drag.offsetY)+'px';
+ clearOver();drag.target=targetAt(e.clientX,e.clientY);
+ if(drag.target!==null&&drag.target!==positions.indexOf(drag.id))cells[drag.target].classList.add('over');
+},{passive:false});
+function finish(e,cancelled=false){
+ if(!drag||e.pointerId!==drag.pointer)return;const d=drag;drag=null;
+ d.ghost?.remove();clearOver();document.body.classList.remove('dragging');
+ if(d.started){suppressClickUntil=performance.now()+300;if(!cancelled){const target=targetAt(e.clientX,e.clientY);if(target!==null)place(d.id,target);}selected=null;render(d.id);document.querySelector(`[data-card="${d.id}"]`)?.focus({preventScroll:true});}
+}
+document.addEventListener('pointerup',e=>finish(e));document.addEventListener('pointercancel',e=>finish(e,true));
+document.addEventListener('click',e=>{
+ // Real dragging is handled by pointerup; ignore its subsequent click.
+ if(performance.now()<suppressClickUntil)return;
+ const cell=e.target.closest('.cell');if(!cell)return;
+ const target=Number(cell.dataset.location),card=e.target.closest('.card');
+ if(selected!==null){const id=selected;place(id,target);selected=null;render(id);return;}
+ if(card){selected=Number(card.dataset.card);render();document.querySelector(`[data-card="${selected}"]`)?.focus({preventScroll:true});}
+});
+document.addEventListener('keydown',e=>{
+ if(e.key==='Escape'){selected=null;render();}
+ if((e.key==='Enter'||e.key===' ')&&e.target.matches('.cell')){e.preventDefault();if(selected!==null){const id=selected;place(id,Number(e.target.dataset.location));selected=null;render(id);}}
+});
+render();
+</script>
+</body>
+</html>
