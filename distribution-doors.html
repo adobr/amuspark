@@ -182,10 +182,12 @@ const finalCtx=finalCanvas.getContext('2d');
 const FADE_MS=500;
 const BETWEEN_MS=300;
 const MAGIC_DUST=['#D09D4C','#E1B86A','#F2D9A3','#F7E6A8'];
+const FINAL_MAGIC_DUST=['#D09D4C','#D09D4C','#D09D4C','#D09D4C','#D09D4C','#D09D4C','#7D7954','#BA5636','#D47E5D','#436A67'];
 const DOOR_DUST=MAGIC_DUST;
 const HOVER_DUST=MAGIC_DUST;
 const FINAL_FADE_MS=2000;
 const FINAL_HOLD_MS=3000;
+const GIRL_EXTRA_DELAY_MS=300;
 
 let step=0; // 0 = choose for self, 1 = boy, 2 = girl, 3 = done
 let busy=false;
@@ -243,6 +245,34 @@ function spawnSwirlParticles(el,inward,palette,count=95){
       rot:Math.random()*Math.PI*2,
       vr:(Math.random()-.5)*.08,
       spark:Math.random()>.82
+    });
+  }
+  startParticles();
+}
+
+function spawnDisappearanceStars(el,palette,count=115,duration=FADE_MS){
+  const b=relBox(el);
+  const base=Math.max(38,Math.min(130,Math.max(b.w,b.h)*.38));
+  for(let i=0;i<count;i++){
+    const a=Math.random()*Math.PI*2;
+    const r=base*(.35+Math.random()*.85);
+    const tangent=a+Math.PI/2;
+    const life=80+Math.random()*(duration-80);
+    addParticle({
+      x:b.cx+Math.cos(a)*r,
+      y:b.cy+Math.sin(a)*r*.82,
+      vx:Math.cos(tangent)*(.35+Math.random()*.7)+Math.cos(a)*(.15+Math.random()*.4),
+      vy:Math.sin(tangent)*(.35+Math.random()*.7)+Math.sin(a)*(.15+Math.random()*.4),
+      life,
+      maxLife:duration,
+      size:1.2+Math.random()*2.6,
+      color:pick(palette),
+      alpha:.78+Math.random()*.2,
+      swirl:true,inward:false,
+      cx:b.cx,cy:b.cy,
+      rot:Math.random()*Math.PI*2,
+      vr:(Math.random()-.5)*.08,
+      spark:true
     });
   }
   startParticles();
@@ -356,14 +386,14 @@ function runFinalVortex(duration=FINAL_FADE_MS+FINAL_HOLD_MS){
   const maxR=Math.hypot(w,h)*.53;
   const count=Math.max(360,Math.round((w*h)/4500));
   const collapseMs=2000;
-  const pulseMs=700;
+  const starHoldMs=200;
   const finalParticles=Array.from({length:count},()=>({
     angle:Math.random()*Math.PI*2,
     radius:maxR*(.08+Math.pow(Math.random(),.72)*.92),
     baseSpeed:.006+Math.random()*.012,
     size:1+Math.random()*3.2,
     alpha:.45+Math.random()*.5,
-    color:pick(MAGIC_DUST),
+    color:pick(FINAL_MAGIC_DUST),
     spark:Math.random()>.8,
     wobble:Math.random()*Math.PI*2,
     wobbleSpeed:.01+Math.random()*.025
@@ -405,44 +435,56 @@ function runFinalVortex(duration=FINAL_FADE_MS+FINAL_HOLD_MS){
         }
         finalCtx.restore();
       }
+      // Let the final yellow star appear 100 ms before the vortex finishes collapsing.
+      const starLeadMs=100;
+      const starSpinRate=(Math.PI*1.6/starHoldMs)/5; // 5x slower than before
+      if(elapsed>=duration-starLeadMs){
+        const starElapsed=Math.max(0,elapsed-(duration-starLeadMs));
+        const angle=starElapsed*starSpinRate;
+        const size=16;
+        finalCtx.save();
+        finalCtx.translate(cx,cy);
+        finalCtx.rotate(angle);
+        finalCtx.globalAlpha=1;
+        finalCtx.shadowBlur=22;
+        finalCtx.shadowColor='#D09D4C';
+        finalCtx.fillStyle='#D09D4C';
+        finalCtx.beginPath();
+        finalCtx.moveTo(0,-size*2);finalCtx.lineTo(size*.5,-size*.45);finalCtx.lineTo(size*2,0);finalCtx.lineTo(size*.5,size*.45);
+        finalCtx.lineTo(0,size*2);finalCtx.lineTo(-size*.5,size*.45);finalCtx.lineTo(-size*2,0);finalCtx.lineTo(-size*.5,-size*.45);finalCtx.closePath();finalCtx.fill();
+        finalCtx.restore();
+      }
       if(elapsed<duration){
         requestAnimationFrame(frame);
       }else{
-        // Pulse the gathered point before it disappears.
-        const pulseStart=performance.now();
-        const pulseFrame=pulseNow=>{
-          const pt=Math.min(1,(pulseNow-pulseStart)/pulseMs);
-          const pulse=1+0.34*Math.sin(pt*Math.PI*4)*(1-pt*.35);
-          const alpha=1-0.15*pt;
+        // Continue the same slow rotation for another 200 ms after the vortex is gone.
+        const starStart=performance.now();
+        const carryAngle=starLeadMs*starSpinRate;
+        const starFrame=starNow=>{
+          const starElapsed=Math.min(starHoldMs,starNow-starStart);
+          const angle=carryAngle+starElapsed*starSpinRate;
+          const size=16;
           finalCtx.clearRect(0,0,w,h);
-          for(const p of finalParticles){
-            finalCtx.save();
-            finalCtx.translate(cx,cy);
-            finalCtx.scale(pulse,pulse);
-            finalCtx.rotate(p.angle);
-            finalCtx.globalAlpha=p.alpha*alpha;
-            finalCtx.shadowBlur=(12+p.size*4)*pulse;
-            finalCtx.shadowColor=p.color;
-            finalCtx.fillStyle=p.color;
-            if(p.spark){
-              const s=p.size*1.7;
-              finalCtx.beginPath();
-              finalCtx.moveTo(0,-s*2);finalCtx.lineTo(s*.5,-s*.45);finalCtx.lineTo(s*2,0);finalCtx.lineTo(s*.5,s*.45);
-              finalCtx.lineTo(0,s*2);finalCtx.lineTo(-s*.5,s*.45);finalCtx.lineTo(-s*2,0);finalCtx.lineTo(-s*.5,-s*.45);finalCtx.closePath();finalCtx.fill();
-            }else{
-              finalCtx.beginPath();finalCtx.arc(0,0,p.size,0,Math.PI*2);finalCtx.fill();
-            }
-            finalCtx.restore();
-          }
-          if(pt<1){
-            requestAnimationFrame(pulseFrame);
+          finalCtx.save();
+          finalCtx.translate(cx,cy);
+          finalCtx.rotate(angle);
+          finalCtx.globalAlpha=1;
+          finalCtx.shadowBlur=22;
+          finalCtx.shadowColor='#D09D4C';
+          finalCtx.fillStyle='#D09D4C';
+          finalCtx.beginPath();
+          finalCtx.moveTo(0,-size*2);finalCtx.lineTo(size*.5,-size*.45);finalCtx.lineTo(size*2,0);finalCtx.lineTo(size*.5,size*.45);
+          finalCtx.lineTo(0,size*2);finalCtx.lineTo(-size*.5,size*.45);finalCtx.lineTo(-size*2,0);finalCtx.lineTo(-size*.5,-size*.45);finalCtx.closePath();finalCtx.fill();
+          finalCtx.restore();
+          if(starElapsed<starHoldMs){
+            requestAnimationFrame(starFrame);
           }else{
             finalCtx.clearRect(0,0,w,h);
             finalCanvas.classList.remove('visible');
             resolve();
           }
         };
-        requestAnimationFrame(pulseFrame);
+        requestAnimationFrame(starFrame);
       }
     };
     requestAnimationFrame(frame);
@@ -465,18 +507,20 @@ function refreshDoors(){
 }
 function setActive(person,on){person?.classList.toggle('active',!!on)}
 
-async function showPerson(person,palette=MAGIC_DUST){
+async function showPerson(person){
   if(!person)return;
   person.classList.remove('leaving');
   setActive(person,true);
-  emitSwirl(person,true,palette,110,FADE_MS,'grow');
-  requestAnimationFrame(()=>requestAnimationFrame(()=>person.classList.add('visible')));
-  await wait(FADE_MS);
+  person.style.transition='none';
+  person.classList.add('visible');
+  // Force the visible state immediately, without magic/fade-in.
+  person.offsetHeight;
+  person.style.transition='';
 }
 async function hidePerson(person,palette=MAGIC_DUST){
   if(!person)return;
   setActive(person,false);
-  emitSwirl(person,false,palette,110,FADE_MS,'shrink');
+  spawnDisappearanceStars(person,palette,115,FADE_MS);
   person.classList.add('leaving');
   await wait(FADE_MS);
   person.classList.remove('visible','leaving');
@@ -514,8 +558,11 @@ async function handleChoice(door,i){
   if(currentStep<2){
     await wait(BETWEEN_MS);
     step=currentStep+1;
-    if(step===1) await showPerson(boy,MAGIC_DUST);
-    if(step===2) await showPerson(girl,MAGIC_DUST);
+    if(step===1) await showPerson(boy);
+    if(step===2){
+      await wait(GIRL_EXTRA_DELAY_MS);
+      await showPerson(girl);
+    }
   }else{
     step=3;
     await finishScene();
