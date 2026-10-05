@@ -34,6 +34,9 @@ body{min-height:100vh;margin:0;overflow:hidden;display:grid;place-items:center;b
 .bush.left{display:none}.bush.right{display:none}
 .path{display:none}
 .magic-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:20}
+.final-magic-canvas{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:100;display:none}
+.final-magic-canvas.visible{display:block}
+.game.final-fade > :not(.magic-canvas){opacity:0;transition:opacity 2s ease}
 
 .doors{
   position:absolute;
@@ -163,6 +166,7 @@ body{min-height:100vh;margin:0;overflow:hidden;display:grid;place-items:center;b
     <div class="person girl" data-person="2"><img src="assets/girl.webp" alt=""></div>
   </div>
 </div>
+<canvas class="final-magic-canvas" id="finalMagicCanvas" aria-hidden="true"></canvas>
 
 <script>
 const game=document.getElementById('game');
@@ -172,12 +176,16 @@ const boy=document.querySelector('.person.boy');
 const girl=document.querySelector('.person.girl');
 const canvas=document.getElementById('magicCanvas');
 const ctx=canvas.getContext('2d');
+const finalCanvas=document.getElementById('finalMagicCanvas');
+const finalCtx=finalCanvas.getContext('2d');
 
 const FADE_MS=500;
 const BETWEEN_MS=300;
 const MAGIC_DUST=['#D09D4C','#E1B86A','#F2D9A3','#F7E6A8'];
 const DOOR_DUST=MAGIC_DUST;
 const HOVER_DUST=MAGIC_DUST;
+const FINAL_FADE_MS=2000;
+const FINAL_HOLD_MS=3000;
 
 let step=0; // 0 = choose for self, 1 = boy, 2 = girl, 3 = done
 let busy=false;
@@ -330,6 +338,123 @@ function startParticles(){
   requestAnimationFrame(frame);
 }
 
+function resizeFinalCanvas(){
+  const fdpr=Math.max(1,window.devicePixelRatio||1);
+  const w=window.innerWidth,h=window.innerHeight;
+  finalCanvas.width=Math.round(w*fdpr);
+  finalCanvas.height=Math.round(h*fdpr);
+  finalCanvas.style.width=w+'px';
+  finalCanvas.style.height=h+'px';
+  finalCtx.setTransform(fdpr,0,0,fdpr,0,0);
+  return {w,h};
+}
+
+function runFinalVortex(duration=FINAL_FADE_MS+FINAL_HOLD_MS){
+  finalCanvas.classList.add('visible');
+  const {w,h}=resizeFinalCanvas();
+  const cx=w/2,cy=h/2;
+  const maxR=Math.hypot(w,h)*.53;
+  const count=Math.max(360,Math.round((w*h)/4500));
+  const collapseMs=2000;
+  const pulseMs=700;
+  const finalParticles=Array.from({length:count},()=>({
+    angle:Math.random()*Math.PI*2,
+    radius:maxR*(.08+Math.pow(Math.random(),.72)*.92),
+    baseSpeed:.006+Math.random()*.012,
+    size:1+Math.random()*3.2,
+    alpha:.45+Math.random()*.5,
+    color:pick(MAGIC_DUST),
+    spark:Math.random()>.8,
+    wobble:Math.random()*Math.PI*2,
+    wobbleSpeed:.01+Math.random()*.025
+  }));
+  const start=performance.now();
+  return new Promise(resolve=>{
+    const frame=now=>{
+      const elapsed=now-start;
+      const progress=Math.min(1,elapsed/duration);
+      const build=Math.min(1,elapsed/650);
+      // Starts slower than before, then accelerates smoothly to 2x the old speed.
+      const speedFactor=.35+1.65*Math.pow(progress,1.45);
+      // During the final part, pull every particle into one point in the centre.
+      const collapseStart=Math.max(0,duration-collapseMs);
+      const collapse=elapsed<=collapseStart?0:Math.min(1,(elapsed-collapseStart)/collapseMs);
+      const collapseEase=collapse*collapse*(3-2*collapse);
+      finalCtx.clearRect(0,0,w,h);
+      for(const p of finalParticles){
+        p.angle+=p.baseSpeed*speedFactor;
+        p.wobble+=p.wobbleSpeed*speedFactor;
+        const liveRadius=p.radius*(.96+.04*Math.sin(p.wobble));
+        const rr=liveRadius*(1-collapseEase);
+        const x=cx+Math.cos(p.angle)*rr;
+        const y=cy+Math.sin(p.angle)*rr*.7;
+        finalCtx.save();
+        finalCtx.translate(x,y);
+        finalCtx.rotate(p.angle);
+        finalCtx.globalAlpha=p.alpha*build;
+        finalCtx.shadowBlur=8+p.size*3;
+        finalCtx.shadowColor=p.color;
+        finalCtx.fillStyle=p.color;
+        if(p.spark){
+          const s=p.size*1.7;
+          finalCtx.beginPath();
+          finalCtx.moveTo(0,-s*2);finalCtx.lineTo(s*.5,-s*.45);finalCtx.lineTo(s*2,0);finalCtx.lineTo(s*.5,s*.45);
+          finalCtx.lineTo(0,s*2);finalCtx.lineTo(-s*.5,s*.45);finalCtx.lineTo(-s*2,0);finalCtx.lineTo(-s*.5,-s*.45);finalCtx.closePath();finalCtx.fill();
+        }else{
+          finalCtx.beginPath();finalCtx.arc(0,0,p.size,0,Math.PI*2);finalCtx.fill();
+        }
+        finalCtx.restore();
+      }
+      if(elapsed<duration){
+        requestAnimationFrame(frame);
+      }else{
+        // Pulse the gathered point before it disappears.
+        const pulseStart=performance.now();
+        const pulseFrame=pulseNow=>{
+          const pt=Math.min(1,(pulseNow-pulseStart)/pulseMs);
+          const pulse=1+0.34*Math.sin(pt*Math.PI*4)*(1-pt*.35);
+          const alpha=1-0.15*pt;
+          finalCtx.clearRect(0,0,w,h);
+          for(const p of finalParticles){
+            finalCtx.save();
+            finalCtx.translate(cx,cy);
+            finalCtx.scale(pulse,pulse);
+            finalCtx.rotate(p.angle);
+            finalCtx.globalAlpha=p.alpha*alpha;
+            finalCtx.shadowBlur=(12+p.size*4)*pulse;
+            finalCtx.shadowColor=p.color;
+            finalCtx.fillStyle=p.color;
+            if(p.spark){
+              const s=p.size*1.7;
+              finalCtx.beginPath();
+              finalCtx.moveTo(0,-s*2);finalCtx.lineTo(s*.5,-s*.45);finalCtx.lineTo(s*2,0);finalCtx.lineTo(s*.5,s*.45);
+              finalCtx.lineTo(0,s*2);finalCtx.lineTo(-s*.5,s*.45);finalCtx.lineTo(-s*2,0);finalCtx.lineTo(-s*.5,-s*.45);finalCtx.closePath();finalCtx.fill();
+            }else{
+              finalCtx.beginPath();finalCtx.arc(0,0,p.size,0,Math.PI*2);finalCtx.fill();
+            }
+            finalCtx.restore();
+          }
+          if(pt<1){
+            requestAnimationFrame(pulseFrame);
+          }else{
+            finalCtx.clearRect(0,0,w,h);
+            finalCanvas.classList.remove('visible');
+            resolve();
+          }
+        };
+        requestAnimationFrame(pulseFrame);
+      }
+    };
+    requestAnimationFrame(frame);
+  });
+}
+
+async function finishScene(){
+  const vortexDone=runFinalVortex(FINAL_FADE_MS+FINAL_HOLD_MS);
+  requestAnimationFrame(()=>game.classList.add('final-fade'));
+  await vortexDone;
+}
+
 function wait(ms){return new Promise(r=>setTimeout(r,ms))}
 function refreshDoors(){
   doors.forEach((door,i)=>{
@@ -393,6 +518,7 @@ async function handleChoice(door,i){
     if(step===2) await showPerson(girl,MAGIC_DUST);
   }else{
     step=3;
+    await finishScene();
   }
   busy=false;
   refreshDoors();
