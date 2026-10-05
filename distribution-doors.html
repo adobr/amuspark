@@ -34,7 +34,7 @@ body{min-height:100vh;margin:0;overflow:hidden;display:grid;place-items:center;b
 .bush.left{display:none}.bush.right{display:none}
 .path{display:none}
 .magic-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:20}
-.final-magic-canvas{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:100;display:none}
+.final-magic-canvas{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:100;display:none}
 .final-magic-canvas.visible{display:block}
 .game.final-fade > :not(.magic-canvas){opacity:0;transition:opacity 2s ease}
 
@@ -368,28 +368,45 @@ function startParticles(){
   requestAnimationFrame(frame);
 }
 
+let finalRunToken=0;
+
+function viewportSize(){
+  const root=document.documentElement;
+  return {
+    w:Math.max(1,root.clientWidth||window.innerWidth||1),
+    h:Math.max(1,root.clientHeight||window.innerHeight||1)
+  };
+}
+
 function resizeFinalCanvas(){
+  const {w,h}=viewportSize();
   const fdpr=Math.max(1,window.devicePixelRatio||1);
-  const w=window.innerWidth,h=window.innerHeight;
-  finalCanvas.width=Math.round(w*fdpr);
-  finalCanvas.height=Math.round(h*fdpr);
+  const pixelW=Math.max(1,Math.round(w*fdpr));
+  const pixelH=Math.max(1,Math.round(h*fdpr));
+  if(finalCanvas.width!==pixelW||finalCanvas.height!==pixelH){
+    finalCanvas.width=pixelW;
+    finalCanvas.height=pixelH;
+  }
   finalCanvas.style.width=w+'px';
   finalCanvas.style.height=h+'px';
   finalCtx.setTransform(fdpr,0,0,fdpr,0,0);
-  return {w,h};
+  return {w,h,fdpr};
 }
 
 function runFinalVortex(duration=FINAL_FADE_MS+FINAL_HOLD_MS){
+  const runToken=++finalRunToken;
   finalCanvas.classList.add('visible');
-  const {w,h}=resizeFinalCanvas();
-  const cx=w/2,cy=h/2;
-  const maxR=Math.hypot(w,h)*.53;
+  let {w,h,fdpr}=resizeFinalCanvas();
+  let cx=w/2,cy=h/2;
+  let maxR=Math.hypot(w,h)*.53;
   const count=Math.max(360,Math.round((w*h)/4500));
   const collapseMs=2000;
   const starHoldMs=200;
+  const starLeadMs=100;
+  const starSpinRate=(Math.PI*1.6/starHoldMs)/5;
   const finalParticles=Array.from({length:count},()=>({
     angle:Math.random()*Math.PI*2,
-    radius:maxR*(.08+Math.pow(Math.random(),.72)*.92),
+    radiusRatio:.08+Math.pow(Math.random(),.72)*.92,
     baseSpeed:.006+Math.random()*.012,
     size:1+Math.random()*3.2,
     alpha:.45+Math.random()*.5,
@@ -399,14 +416,40 @@ function runFinalVortex(duration=FINAL_FADE_MS+FINAL_HOLD_MS){
     wobbleSpeed:.01+Math.random()*.025
   }));
   const start=performance.now();
+
+  function syncViewport(){
+    const size=viewportSize();
+    const nextDpr=Math.max(1,window.devicePixelRatio||1);
+    if(size.w!==w||size.h!==h||nextDpr!==fdpr){
+      ({w,h,fdpr}=resizeFinalCanvas());
+      cx=w/2; cy=h/2;
+      maxR=Math.hypot(w,h)*.53;
+    }
+  }
+
+  function drawFinalStar(angle){
+    const size=16;
+    finalCtx.save();
+    finalCtx.translate(cx,cy);
+    finalCtx.rotate(angle);
+    finalCtx.globalAlpha=1;
+    finalCtx.shadowBlur=22;
+    finalCtx.shadowColor='#D09D4C';
+    finalCtx.fillStyle='#D09D4C';
+    finalCtx.beginPath();
+    finalCtx.moveTo(0,-size*2);finalCtx.lineTo(size*.5,-size*.45);finalCtx.lineTo(size*2,0);finalCtx.lineTo(size*.5,size*.45);
+    finalCtx.lineTo(0,size*2);finalCtx.lineTo(-size*.5,size*.45);finalCtx.lineTo(-size*2,0);finalCtx.lineTo(-size*.5,-size*.45);finalCtx.closePath();finalCtx.fill();
+    finalCtx.restore();
+  }
+
   return new Promise(resolve=>{
     const frame=now=>{
+      if(runToken!==finalRunToken){resolve();return}
+      syncViewport();
       const elapsed=now-start;
       const progress=Math.min(1,elapsed/duration);
       const build=Math.min(1,elapsed/650);
-      // Starts slower than before, then accelerates smoothly to 2x the old speed.
       const speedFactor=.35+1.65*Math.pow(progress,1.45);
-      // During the final part, pull every particle into one point in the centre.
       const collapseStart=Math.max(0,duration-collapseMs);
       const collapse=elapsed<=collapseStart?0:Math.min(1,(elapsed-collapseStart)/collapseMs);
       const collapseEase=collapse*collapse*(3-2*collapse);
@@ -414,7 +457,7 @@ function runFinalVortex(duration=FINAL_FADE_MS+FINAL_HOLD_MS){
       for(const p of finalParticles){
         p.angle+=p.baseSpeed*speedFactor;
         p.wobble+=p.wobbleSpeed*speedFactor;
-        const liveRadius=p.radius*(.96+.04*Math.sin(p.wobble));
+        const liveRadius=maxR*p.radiusRatio*(.96+.04*Math.sin(p.wobble));
         const rr=liveRadius*(1-collapseEase);
         const x=cx+Math.cos(p.angle)*rr;
         const y=cy+Math.sin(p.angle)*rr*.7;
@@ -435,47 +478,21 @@ function runFinalVortex(duration=FINAL_FADE_MS+FINAL_HOLD_MS){
         }
         finalCtx.restore();
       }
-      // Let the final yellow star appear 100 ms before the vortex finishes collapsing.
-      const starLeadMs=100;
-      const starSpinRate=(Math.PI*1.6/starHoldMs)/5; // 5x slower than before
       if(elapsed>=duration-starLeadMs){
         const starElapsed=Math.max(0,elapsed-(duration-starLeadMs));
-        const angle=starElapsed*starSpinRate;
-        const size=16;
-        finalCtx.save();
-        finalCtx.translate(cx,cy);
-        finalCtx.rotate(angle);
-        finalCtx.globalAlpha=1;
-        finalCtx.shadowBlur=22;
-        finalCtx.shadowColor='#D09D4C';
-        finalCtx.fillStyle='#D09D4C';
-        finalCtx.beginPath();
-        finalCtx.moveTo(0,-size*2);finalCtx.lineTo(size*.5,-size*.45);finalCtx.lineTo(size*2,0);finalCtx.lineTo(size*.5,size*.45);
-        finalCtx.lineTo(0,size*2);finalCtx.lineTo(-size*.5,size*.45);finalCtx.lineTo(-size*2,0);finalCtx.lineTo(-size*.5,-size*.45);finalCtx.closePath();finalCtx.fill();
-        finalCtx.restore();
+        drawFinalStar(starElapsed*starSpinRate);
       }
       if(elapsed<duration){
         requestAnimationFrame(frame);
       }else{
-        // Continue the same slow rotation for another 200 ms after the vortex is gone.
         const starStart=performance.now();
         const carryAngle=starLeadMs*starSpinRate;
         const starFrame=starNow=>{
+          if(runToken!==finalRunToken){resolve();return}
+          syncViewport();
           const starElapsed=Math.min(starHoldMs,starNow-starStart);
-          const angle=carryAngle+starElapsed*starSpinRate;
-          const size=16;
           finalCtx.clearRect(0,0,w,h);
-          finalCtx.save();
-          finalCtx.translate(cx,cy);
-          finalCtx.rotate(angle);
-          finalCtx.globalAlpha=1;
-          finalCtx.shadowBlur=22;
-          finalCtx.shadowColor='#D09D4C';
-          finalCtx.fillStyle='#D09D4C';
-          finalCtx.beginPath();
-          finalCtx.moveTo(0,-size*2);finalCtx.lineTo(size*.5,-size*.45);finalCtx.lineTo(size*2,0);finalCtx.lineTo(size*.5,size*.45);
-          finalCtx.lineTo(0,size*2);finalCtx.lineTo(-size*.5,size*.45);finalCtx.lineTo(-size*2,0);finalCtx.lineTo(-size*.5,-size*.45);finalCtx.closePath();finalCtx.fill();
-          finalCtx.restore();
+          drawFinalStar(carryAngle+starElapsed*starSpinRate);
           if(starElapsed<starHoldMs){
             requestAnimationFrame(starFrame);
           }else{
