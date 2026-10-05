@@ -6,17 +6,15 @@
 <title>Choose an Option</title>
 <style>
 *{box-sizing:border-box}
-body{margin:0;min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:24px;background:#f7f8fa;font-family:Arial,sans-serif}
-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;width:min(680px,100%)}
-nav a:last-child{grid-column:1/-1}
-
-
-a{display:block;padding:20px 24px;border:2px solid #ccd5e0;border-radius:16px;background:#fff;color:#38485a;text-align:center;text-decoration:none;font-size:20px;transition:background .15s,border-color .15s}
-a:hover{background:#eaf3ff;border-color:#82a7cf}
-a:active{background:#dceafa}
-a:focus-visible{outline:3px solid #82a7cf;outline-offset:4px}
+body{margin:0;min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:24px;background:#F4EBE2;font-family:Arial,sans-serif}
+nav{display:grid;grid-template-columns:1fr 1fr;gap:16px;width:min(680px,100%)}
+a{display:block;padding:20px 24px;border:2px solid #CCB9A2;border-radius:16px;background:#FBF7F3;color:#2B2823;text-align:center;text-decoration:none;font-size:20px;transition:background .15s,border-color .15s}
+a:hover{background:#E5D8C8;border-color:#D09D4C}
+a:active{background:#E5D8C8}
+a:focus-visible{outline:3px solid #D09D4C;outline-offset:4px}
+a.wide{grid-column:1/-1}
+@media(max-width:620px){nav{grid-template-columns:1fr}a.wide{grid-column:auto}}
 @media(prefers-reduced-motion:reduce){a{transition:none}}
-@media(max-width:700px){body{padding:16px}nav{gap:12px}a{padding:16px 10px;font-size:16px}}
 </style>
 </head>
 <body>
@@ -25,9 +23,8 @@ a:focus-visible{outline:3px solid #82a7cf;outline-offset:4px}
 <a href="drag-task-vertical.html">Drag and Drop Task — Vertical</a>
 <a href="buttons-task.html">Buttons Task</a>
 <a href="buttons_task_vertical.html">Buttons Task — Vertical</a>
-<a href="distribution.html">Distribution to Backpack</a>
-<a href="distribution-stickerbook.html">Distribution to Stickerbook</a>
-<a href="distribution-full-body.html">Distribution — Full Body</a>
+<a href="distribution-doors.html">Distribution</a>
+<a class="wide" href="with-intro.html">Task With Intro</a>
 </nav>
 <script>
 let requestNumber=0;

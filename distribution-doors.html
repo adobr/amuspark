@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Distribution — Doors</title>
+<style>
+:root{
+  --bg:#F4EBE2;
+  --paper:#FBF7F3;
+  --olive:#7D7954;
+  --olive-dark:#5F5C3F;
+  --teal:#436A67;
+  --mustard:#D09D4C;
+  --terracotta:#BA5636;
+  --coral:#D47E5D;
+  --brown:#815236;
+  --dark:#2B2823;
+  --slot:#E8D7C3;
+  --line:#B9A48F;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:linear-gradient(#F7F2EB 0%,#EFE7DC 100%);font-family:Arial,sans-serif;color:var(--dark)}
+body{min-height:100vh;margin:0;overflow:hidden;display:grid;place-items:center;background:linear-gradient(#F7F2EB 0%,#EFE7DC 100%)}
+.game{
+  width:90vw;
+  height:90vh;
+  position:relative;
+  overflow:hidden;
+  background:transparent;
+}
+.canopy{display:none}
+.bush{display:none}
+.bush.left{display:none}.bush.right{display:none}
+.path{display:none}
+
+.doors{
+  position:absolute;
+  left:19%; right:19%; top:6%;
+  height:44%;
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:3.5%;
+  align-items:end;
+}
+.door-wrap{position:relative;height:100%;display:flex;align-items:end;justify-content:center}
+.behind-child{position:absolute;left:66%;bottom:2%;height:36%;width:auto;transform:translateX(-50%);z-index:1;pointer-events:none;opacity:0;visibility:hidden;transition:opacity .5s ease,visibility 0s linear .5s}
+.behind-child.visible{opacity:1;visibility:visible;transition:opacity .5s ease,visibility 0s linear 0s}
+.behind-child img{display:block;height:100%;width:auto;object-fit:contain;filter:drop-shadow(0 3px 5px rgba(0,0,0,.08))}
+.vines{
+  position:absolute;inset:4% -4% 0;
+  border:18px solid var(--olive);
+  border-bottom:0;
+  border-radius:46% 46% 8% 8%;
+  opacity:.72;
+  pointer-events:none;
+  z-index:0;
+}
+.door{
+  position:relative;
+  width:72%; height:76%;
+  border:0;
+  border-radius:48% 48% 7% 7% / 25% 25% 4% 4%;
+  background:#A76A3E;
+  box-shadow:inset 0 0 0 5px #815236, inset 0 0 0 9px #c48a57;
+  cursor:pointer;
+  transform-origin:left center;
+  transition:transform .3s ease, filter .2s, box-shadow .2s;
+  z-index:2;
+}
+.door::before{
+  content:"";
+  position:absolute;inset:7% 10%;
+  border-radius:46% 46% 4% 4% / 23% 23% 3% 3%;
+  background:repeating-linear-gradient(90deg,#a96c40 0 19%,#8f5936 19% 21%);
+  opacity:.75;
+}
+.door:hover:not(:disabled){filter:brightness(1.05);box-shadow:inset 0 0 0 5px #815236,inset 0 0 0 9px #c48a57,0 0 0 7px #D09D4C}
+.door:focus-visible{outline:7px solid var(--mustard);outline-offset:7px}
+.door.assigned{transform:perspective(700px) rotateY(64deg);filter:brightness(1.08);cursor:default}
+.knob{position:absolute;right:12%;top:56%;width:20px;height:20px;border-radius:50%;background:var(--mustard);border:3px solid #8f642b;z-index:3}
+
+.sign{
+  position:absolute;left:16%;right:16%;top:28%;height:21%;
+  z-index:4;border-radius:14px;background:#D8BD9F;border:3px solid var(--brown);
+  display:grid;place-items:center;
+}
+.sign svg{width:78%;height:78%}
+.sign path,.sign rect,.sign circle,.sign line,.sign polyline{stroke:var(--brown);fill:none;stroke-width:8;stroke-linecap:round;stroke-linejoin:round}
+.sign .fill{fill:var(--brown);stroke:none}
+
+.recipient{position:absolute;left:1%;bottom:1%;width:16%;height:44%;display:flex;align-items:flex-end;justify-content:flex-start;pointer-events:none}
+.recipient img{height:100%;width:auto;display:block;object-fit:contain;transform:scaleX(-1);transform-origin:center;filter:drop-shadow(0 4px 6px rgba(0,0,0,.08))}
+
+.people{
+  position:absolute;left:31%;right:31%;bottom:1%;height:30.8%;
+  pointer-events:none;
+}
+.person{
+  height:100%;width:auto;position:absolute;left:50%;bottom:0;display:flex;align-items:flex-end;justify-content:center;
+  transform:translateX(-50%);
+  opacity:0;visibility:hidden;transition:transform .5s ease,filter .2s,opacity .5s ease,visibility 0s linear .5s;
+}
+.person img{width:auto;height:100%;object-fit:contain;object-position:bottom center;display:block;filter:drop-shadow(0 4px 6px rgba(0,0,0,.08))}
+.person.visible{opacity:1;visibility:visible;transition:transform .5s ease,filter .2s,opacity .5s ease,visibility 0s linear 0s}.person.active{transform:translateX(-50%) translateY(-3%);filter:drop-shadow(0 0 11px #D09D4C)}
+.person.active img{filter:drop-shadow(0 0 11px #D09D4C)}
+.person.leaving{opacity:0;transform:translateX(-50%) translateY(-6%) scale(.97);filter:none}
+
+@media(max-width:760px){
+  .doors{left:11%;right:11%;top:7%;height:42%;gap:2%}
+  .recipient{left:1%;bottom:1%;width:17%;height:42%}
+  .people{left:29%;right:29%;bottom:1%;height:29.4%}
+  .person{min-width:56px}
+}
+</style>
+</head>
+<body>
+<div class="game" id="game">
+  <div class="canopy"></div>
+  <div class="bush left"></div><div class="bush right"></div><div class="path"></div>
+
+  <div class="recipient" aria-hidden="true">
+    <img src="assets/guide.webp" alt="">
+  </div>
+
+  <div class="doors" id="doors">
+    <div class="door-wrap" data-door="0">
+      <div class="vines"></div>
+      <button class="door" type="button" aria-label="Bridge">
+        <span class="sign">
+          <svg viewBox="0 0 120 70" aria-hidden="true">
+            <path d="M12 48 Q60 14 108 48"/><path d="M17 49v11M103 49v11M33 39v17M87 39v17M53 31v22M67 31v22"/><line x1="13" y1="58" x2="107" y2="58"/>
+          </svg>
+        </span><span class="knob"></span>
+      </button>
+    </div>
+    <div class="door-wrap" data-door="1">
+      <div class="vines"></div>
+      <button class="door" type="button" aria-label="Trees">
+        <span class="sign">
+          <svg viewBox="0 0 120 70" aria-hidden="true">
+            <circle class="fill" cx="24" cy="35" r="14"/><rect class="fill" x="20" y="45" width="8" height="15"/>
+            <path d="M60 10 43 42h34z" class="fill"/><rect class="fill" x="56" y="42" width="8" height="18"/>
+            <path d="M95 22c-12 1-17 8-18 15 8-5 13-5 18-1-2-9 2-14 10-17-7-2-12-1-16 4-1-5-4-8-9-10 1 6 4 10 8 12z" class="fill"/><rect class="fill" x="91" y="35" width="7" height="25"/>
+          </svg>
+        </span><span class="knob"></span>
+      </button>
+    </div>
+    <div class="door-wrap" data-door="2">
+      <div class="vines"></div>
+      <button class="door" type="button" aria-label="Sound">
+        <span class="sign">
+          <svg viewBox="0 0 120 70" aria-hidden="true">
+            <path class="fill" d="M16 29h13l17-14v40L29 41H16z"/>
+            <path d="M55 26q12 9 0 18M69 20q20 15 0 30"/>
+            <path class="fill" d="M82 29h10l13-10v32L92 41H82z"/>
+          </svg>
+        </span><span class="knob"></span>
+      </button>
+    </div>
+  </div>
+
+  <div class="people" aria-hidden="true">
+    <div class="person boy" data-person="1"><img src="assets/boy.webp" alt=""></div>
+    <div class="person girl" data-person="2"><img src="assets/girl.webp" alt=""></div>
+  </div>
+</div>
+
+<script>
+const doors=[...document.querySelectorAll('.door')];
+const wraps=[...document.querySelectorAll('.door-wrap')];
+const boy=document.querySelector('.person.boy');
+const girl=document.querySelector('.person.girl');
+let step=0; // 0 = choose for self, 1 = boy, 2 = girl, 3 = done
+let busy=false;
+const assigned=[null,null,null];
+
+function update(){
+  // Keep the current child visible while their chosen door is opening.
+  boy.classList.toggle('visible', step===1);
+  girl.classList.toggle('visible', step===2);
+  boy.classList.toggle('active', step===1 && !busy);
+  girl.classList.toggle('active', step===2 && !busy);
+  doors.forEach((door,i)=>{
+    const taken=assigned.includes(i);
+    door.disabled=busy || taken || step>=3;
+    door.classList.toggle('assigned',taken);
+  });
+}
+
+function afterDoorOpens(door, callback){
+  let finished=false;
+  const finish=()=>{
+    if(finished) return;
+    finished=true;
+    door.removeEventListener('transitionend', onEnd);
+    callback();
+  };
+  const onEnd=(event)=>{
+    if(event.propertyName==='transform') finish();
+  };
+  door.addEventListener('transitionend',onEnd);
+  setTimeout(finish,380);
+}
+
+const FADE_MS=500;
+const BETWEEN_MS=300;
+
+function fadeChildBehindDoor(person, doorIndex, callback){
+  if(!person){ callback(); return; }
+
+  // 1. Fade the child out from the waiting area.
+  person.classList.remove('active');
+  person.classList.add('leaving');
+
+  setTimeout(()=>{
+    person.classList.remove('visible');
+
+    // 2. Put the same child behind the chosen door and fade them in there.
+    const img=person.querySelector('img');
+    const holder=document.createElement('div');
+    holder.className='behind-child';
+    const clone=img.cloneNode(true);
+    clone.alt='';
+    holder.appendChild(clone);
+    wraps[doorIndex].appendChild(holder);
+
+    requestAnimationFrame(()=>requestAnimationFrame(()=>holder.classList.add('visible')));
+
+    // Continue only after the fade-in has finished.
+    setTimeout(callback, FADE_MS);
+  }, FADE_MS);
+}
+
+doors.forEach((door,i)=>{
+  door.addEventListener('click',()=>{
+    if(busy || step>=3 || assigned.includes(i)) return;
+    busy=true;
+    const currentStep=step;
+    assigned[currentStep]=i;
+    update(); // selected door starts opening; all doors are locked
+
+    afterDoorOpens(door,()=>{
+      const finishTurn=()=>{
+        // Pause after the move/fade, then let the next child fade in.
+        setTimeout(()=>{
+          step=currentStep+1;
+          busy=false;
+          update();
+        }, BETWEEN_MS);
+      };
+
+      if(currentStep===1) fadeChildBehindDoor(boy,i,finishTurn);
+      else if(currentStep===2) fadeChildBehindDoor(girl,i,finishTurn);
+      else finishTurn();
+    });
+  });
+});
+update();
+</script>
+</body>
+</html>
