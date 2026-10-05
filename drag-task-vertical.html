@@ -75,6 +75,13 @@ body{padding-top:160px;padding-bottom:48px}
 .card{padding:20px}
 .card.picture{background:#D09D4C}
 @media(max-width:700px){.workspace{width:100%}.row{gap:16px}.cell{aspect-ratio:3/4}.card{padding:12px}.tray{margin-top:24px}}
+
+/* Shared task chrome + reward polish */
+.reward-frame{border:6px solid #D09D4C!important;padding:8px!important}
+.firework-star{position:absolute;left:var(--left);top:var(--top);width:var(--size);height:var(--size);background:#D09D4C;clip-path:polygon(50% 0%,61% 39%,100% 50%,61% 61%,50% 100%,39% 61%,0 50%,39% 39%);filter:drop-shadow(0 0 5px rgba(208,157,76,.8));opacity:0;animation:firework-star-pop 1.15s cubic-bezier(.15,.7,.3,1) var(--delay) both}
+@keyframes firework-star-pop{0%{opacity:0;transform:translate(-50%,-50%) scale(.15) rotate(0deg)}16%,70%{opacity:1}100%{opacity:0;transform:translate(-50%,-50%) scale(1.25) rotate(130deg)}}
+@media(prefers-reduced-motion:reduce){.firework-star{display:none}}
+
 </style>
 </head>
 <body>
@@ -147,7 +154,7 @@ function render(settled=null){
  cells.forEach((cell,i)=>{
   const id=positions[i];cell.classList.toggle('filled',id!==null);cell.classList.toggle('empty',id===null);
   cell.setAttribute('aria-label',`${i<3?'Slot':'Card position'} ${i%3+1}, ${id===null?'empty':names[id]}`);
-  cell.innerHTML=id===null?'':`<button type="button" class="card${id===0?' picture':''}${id===selected?' selected':''}${id===settled?' settled':''}" data-card="${id}" aria-label="${id+1}. ${names[id]}. Drag to a slot, or press Enter then choose a slot." aria-pressed="${id===selected}"><span class="card-number" aria-hidden="true">${id+1}</span>${icons[id]}</button>`;
+  cell.innerHTML=id===null?'':`<button type="button" class="card${id===0?' picture':''}${id===selected?' selected':''}${id===settled?' settled':''}" data-card="${id}" aria-label="${id+1}. ${names[id]}. Drag to a slot." aria-pressed="${id===selected}"><span class="card-number" aria-hidden="true">${id+1}</span>${icons[id]}</button>`;
  });
 }
 function place(id,target){
@@ -179,14 +186,6 @@ function finish(e,cancelled=false){
  if(d.started){suppressClickUntil=performance.now()+300;if(!cancelled){const target=targetAt(e.clientX,e.clientY);if(target!==null)place(d.id,target);}selected=null;render(d.id);document.querySelector(`[data-card="${d.id}"]`)?.focus({preventScroll:true});}
 }
 document.addEventListener('pointerup',e=>finish(e));document.addEventListener('pointercancel',e=>finish(e,true));
-document.addEventListener('click',e=>{
- // Real dragging is handled by pointerup; ignore its subsequent click.
- if(busy||explaining||performance.now()<suppressClickUntil)return;stopIntro();
- const cell=e.target.closest('.cell');if(!cell)return;
- const target=Number(cell.dataset.location),card=e.target.closest('.card');
- if(selected!==null){const id=selected;place(id,target);selected=null;render(id);return;}
- if(card){selected=Number(card.dataset.card);render();document.querySelector(`[data-card="${selected}"]`)?.focus({preventScroll:true});}
-});
 document.addEventListener('keydown',e=>{
  if(e.key==='Escape'&&!rewardScreen.hidden){rewardScreen.classList.remove('expanded');rewardFrame.setAttribute('aria-pressed','false');rewardFrame.setAttribute('aria-label','Enlarge reward picture');return;}
  if(busy||explaining)return;if(['Escape','Enter',' '].includes(e.key))stopIntro();
@@ -209,17 +208,26 @@ helpButton.addEventListener('click',()=>{
 const rewardScreen=document.getElementById('reward-screen');
 const rewardFrame=document.getElementById('reward-frame');
 const fireworks=document.getElementById('fireworks');
-let fireworksTimer=null;
+let fireworksTimer=null,rewardReturnTimer=null;
 rewardFrame.addEventListener('click',()=>{
  const expanded=!rewardScreen.classList.contains('expanded');
  rewardScreen.classList.toggle('expanded',expanded);
  rewardFrame.setAttribute('aria-pressed',String(expanded));
  rewardFrame.setAttribute('aria-label',expanded?'Reduce reward picture':'Enlarge reward picture');
 });
+function resetAfterReward(){
+ clearTimeout(fireworksTimer);clearTimeout(rewardReturnTimer);fireworks.innerHTML='';
+ rewardScreen.hidden=true;rewardScreen.classList.remove('expanded');rewardFrame.setAttribute('aria-pressed','false');rewardFrame.setAttribute('aria-label','Enlarge reward picture');
+ document.body.classList.remove('rewarded');workspace.inert=false;helpButton.disabled=false;
+ positions=initialPositions.slice();selected=null;drag=null;busy=false;
+ workspace.classList.remove('success','hide-tray','feedback','wrong','returning');
+ const tray=document.querySelector('.tray');if(tray){tray.removeAttribute('aria-hidden');tray.inert=false;}
+ cells.forEach(cell=>{cell.tabIndex=0;});render();status.textContent='Move the cards to the slots.';
+}
 function showReward(){
  workspace.inert=true;helpButton.disabled=true;document.body.classList.add('rewarded');
  rewardScreen.hidden=false;status.textContent='Your reward is ready.';
- const colours=['#ffd43b','#ff557c','#47e0ff','#b482ff','#70f0a1','#ffffff'];
+ const colours=['#D09D4C','#D09D4C','#D09D4C','#7D7954','#BA5636','#D47E5D','#436A67','#815236'];
  const centres=[[14,22],[86,25],[28,12],[73,85],[12,77],[90,67]];
  const bursts=Array.from({length:18},(_,burst)=>{
   const [x,y]=centres[burst%centres.length],delay=Math.floor(burst/6)*550+(burst%6)*75;
@@ -228,13 +236,15 @@ function showReward(){
   return flash+Array.from({length:48},(_,i)=>{
    const angle=(i%24)*Math.PI/12+Math.floor(i/24)*.08;
    const reach=(i<24?30:19)+(i%3)*2;
-   return `<span class="spark" style="left:${x}%;top:${y}%;--dx:${Math.cos(angle)*reach}vmin;--dy:${Math.sin(angle)*reach+8}vmin;--angle:${angle*180/Math.PI+90}deg;--delay:${delay}ms;--spark-colour:${i%8===0?'#ffffff':colour}"></span>`;
+   return `<span class="spark" style="left:${x}%;top:${y}%;--dx:${Math.cos(angle)*reach}vmin;--dy:${Math.sin(angle)*reach+8}vmin;--angle:${angle*180/Math.PI+90}deg;--delay:${delay}ms;--spark-colour:${i%8===0?'#D09D4C':colour}"></span>`;
   }).join('');
  }).join('');
  const confetti=Array.from({length:120},(_,i)=>`<span class="confetti" style="--left:${(i*37)%100}%;--drift:${(i%2?1:-1)*(12+i%18)}vw;--spin:${(i%2?1:-1)*(360+i%5*180)}deg;--delay:${300+i%12*50}ms;--spark-colour:${colours[i%colours.length]}"></span>`).join('');
- fireworks.innerHTML=bursts+confetti;
+ const stars=Array.from({length:54},(_,i)=>`<span class="firework-star" style="--left:${7+(i*37)%87}%;--top:${8+(i*53)%82}%;--size:${10+(i%4)*4}px;--delay:${180+(i%14)*85}ms"></span>`).join('');
+ fireworks.innerHTML=bursts+confetti+stars;
  rewardFrame.focus({preventScroll:true});
  fireworksTimer=setTimeout(()=>{fireworks.innerHTML='';},2800);
+ rewardReturnTimer=setTimeout(resetAfterReward,4800);
  status.textContent='Task completed. Your reward is ready.';
 }
 render();
