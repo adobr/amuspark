@@ -45,9 +45,6 @@ body{min-height:100vh;margin:0;overflow:hidden;display:grid;place-items:center;b
   align-items:end;
 }
 .door-wrap{position:relative;height:100%;display:flex;align-items:end;justify-content:center}
-.behind-child{position:absolute;left:66%;bottom:2%;height:36%;width:auto;transform:translateX(-50%);z-index:1;pointer-events:none;opacity:0;visibility:hidden;transition:opacity .5s ease,visibility 0s linear .5s}
-.behind-child.visible{opacity:1;visibility:visible;transition:opacity .5s ease,visibility 0s linear 0s}
-.behind-child img{display:block;height:100%;width:auto;object-fit:contain;filter:drop-shadow(0 3px 5px rgba(0,0,0,.08))}
 .vines{
   position:absolute;inset:4% -4% 0;
   border:18px solid var(--olive);
@@ -359,22 +356,6 @@ async function hidePerson(person,palette=MAGIC_DUST){
   await wait(FADE_MS);
   person.classList.remove('visible','leaving');
 }
-async function showBehindDoor(person,doorIndex,palette=MAGIC_DUST){
-  const img=person.querySelector('img');
-  const holder=document.createElement('div');
-  holder.className='behind-child';
-  const clone=img.cloneNode(true);clone.alt='';
-  holder.appendChild(clone);
-  wraps[doorIndex].appendChild(holder);
-  await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
-  emitSwirl(holder,true,palette,95,FADE_MS,'grow');
-  holder.classList.add('visible');
-  await wait(FADE_MS);
-}
-async function moveChildBehindDoor(person,doorIndex,palette=MAGIC_DUST){
-  await hidePerson(person,palette);
-  await showBehindDoor(person,doorIndex,palette);
-}
 
 function afterDoorOpens(door){
   return new Promise(resolve=>{
@@ -393,10 +374,17 @@ async function handleChoice(door,i){
   assigned[currentStep]=i;
   refreshDoors();
   spawnDoorDust(door,84);
-  await afterDoorOpens(door);
 
-  if(currentStep===1) await moveChildBehindDoor(boy,i,MAGIC_DUST);
-  if(currentStep===2) await moveChildBehindDoor(girl,i,MAGIC_DUST);
+  // For the children's turns, the door opens while the child disappears.
+  // There is no second appearance behind the door.
+  const opening=afterDoorOpens(door);
+  if(currentStep===1){
+    await Promise.all([opening, hidePerson(boy,MAGIC_DUST)]);
+  }else if(currentStep===2){
+    await Promise.all([opening, hidePerson(girl,MAGIC_DUST)]);
+  }else{
+    await opening;
+  }
 
   if(currentStep<2){
     await wait(BETWEEN_MS);
