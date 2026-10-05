@@ -103,8 +103,7 @@ body{min-height:100vh;margin:0;overflow:hidden;display:grid;place-items:center;b
   opacity:0;visibility:hidden;transition:transform .5s ease,filter .2s,opacity .5s ease,visibility 0s linear .5s;
 }
 .person img{width:auto;height:100%;object-fit:contain;object-position:bottom center;display:block;filter:drop-shadow(0 4px 6px rgba(0,0,0,.08))}
-.person.visible{opacity:1;visibility:visible;transition:transform .5s ease,filter .2s,opacity .5s ease,visibility 0s linear 0s}.person.active{transform:translateX(-50%) translateY(-3%);filter:drop-shadow(0 0 11px #D09D4C)}
-.person.active img{filter:drop-shadow(0 0 11px #D09D4C)}
+.person.visible{opacity:1;visibility:visible;transition:transform .5s ease,opacity .5s ease,visibility 0s linear 0s}
 .person.leaving{opacity:0;transform:translateX(-50%) translateY(-6%) scale(.97);filter:none}
 
 @media(max-width:760px){
@@ -179,13 +178,14 @@ const ctx=canvas.getContext('2d');
 
 const FADE_MS=500;
 const BETWEEN_MS=300;
-const BOY_DUST=['#C97A32','#A85E2D','#815236'];
-const GIRL_DUST=['#C95E46','#BA5636','#8E4735'];
-const DOOR_DUST=['#D09D4C','#E1B86A','#F2D9A3'];
+const MAGIC_DUST=['#D09D4C','#E1B86A','#F2D9A3','#F7E6A8'];
+const DOOR_DUST=MAGIC_DUST;
+const HOVER_DUST=MAGIC_DUST;
 
 let step=0; // 0 = choose for self, 1 = boy, 2 = girl, 3 = done
 let busy=false;
 const assigned=[null,null,null];
+const lastHoverAt=new WeakMap();
 
 const particles=[];
 let particleLoop=false;
@@ -212,7 +212,7 @@ function relBox(el){
 function pick(arr){return arr[(Math.random()*arr.length)|0]}
 function addParticle(p){particles.push(p)}
 
-function spawnSwirl(el,inward,palette,count=95){
+function spawnSwirlParticles(el,inward,palette,count=95){
   const b=relBox(el);
   const base=Math.max(38,Math.min(130,Math.max(b.w,b.h)*.38));
   for(let i=0;i<count;i++){
@@ -228,11 +228,11 @@ function spawnSwirl(el,inward,palette,count=95){
       x,y,
       vx:Math.cos(tangent)*speed+Math.cos(a)*radial*(.22+Math.random()*.45),
       vy:Math.sin(tangent)*speed+Math.sin(a)*radial*(.22+Math.random()*.45),
-      life:850+Math.random()*650,
-      maxLife:1500,
+      life:520+Math.random()*420,
+      maxLife:940,
       size:1.2+Math.random()*2.6,
       color:pick(palette),
-      alpha:.7+Math.random()*.25,
+      alpha:.78+Math.random()*.2,
       swirl:true,inward,
       cx:b.cx,cy:b.cy,
       rot:Math.random()*Math.PI*2,
@@ -241,6 +241,26 @@ function spawnSwirl(el,inward,palette,count=95){
     });
   }
   startParticles();
+}
+
+function emitSwirl(el,inward,palette,totalCount=95,duration=FADE_MS,trend='grow'){
+  let emitted=0;
+  const start=performance.now();
+  const cumulative=t=> trend==='grow' ? (t*t) : (1-Math.pow(1-t,2));
+  return new Promise(resolve=>{
+    const frame=now=>{
+      const t=Math.min(1,(now-start)/duration);
+      const target=Math.round(totalCount*cumulative(t));
+      const delta=target-emitted;
+      if(delta>0){
+        spawnSwirlParticles(el,inward,palette,delta);
+        emitted+=delta;
+      }
+      if(t<1) requestAnimationFrame(frame);
+      else resolve();
+    };
+    requestAnimationFrame(frame);
+  });
 }
 
 function spawnDoorDust(door,count=42){
@@ -278,7 +298,8 @@ function renderParticles(){
     const t=Math.max(0,p.life/p.maxLife);
     ctx.save();
     ctx.translate(p.x,p.y);ctx.rotate(p.rot);
-    ctx.globalAlpha=p.alpha*Math.min(1,t*2.5);
+    const endFade=Math.min(1,p.life/160);
+    ctx.globalAlpha=p.alpha*endFade;
     ctx.shadowBlur=6+p.size*2.5;
     ctx.shadowColor=p.color;
     ctx.fillStyle=p.color;
@@ -322,36 +343,35 @@ function refreshDoors(){
 }
 function setActive(person,on){person?.classList.toggle('active',!!on)}
 
-async function showPerson(person,palette){
+async function showPerson(person,palette=MAGIC_DUST){
   if(!person)return;
   person.classList.remove('leaving');
   setActive(person,true);
-  spawnSwirl(person,true,palette,100);
+  emitSwirl(person,true,palette,110,FADE_MS,'grow');
   requestAnimationFrame(()=>requestAnimationFrame(()=>person.classList.add('visible')));
   await wait(FADE_MS);
 }
-async function hidePerson(person,palette){
+async function hidePerson(person,palette=MAGIC_DUST){
   if(!person)return;
   setActive(person,false);
-  spawnSwirl(person,false,palette,115);
+  emitSwirl(person,false,palette,110,FADE_MS,'shrink');
   person.classList.add('leaving');
   await wait(FADE_MS);
   person.classList.remove('visible','leaving');
 }
-async function showBehindDoor(person,doorIndex,palette){
+async function showBehindDoor(person,doorIndex,palette=MAGIC_DUST){
   const img=person.querySelector('img');
   const holder=document.createElement('div');
   holder.className='behind-child';
   const clone=img.cloneNode(true);clone.alt='';
   holder.appendChild(clone);
   wraps[doorIndex].appendChild(holder);
-  // layout first, then swirl + fade in
   await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
-  spawnSwirl(holder,true,palette,90);
+  emitSwirl(holder,true,palette,95,FADE_MS,'grow');
   holder.classList.add('visible');
   await wait(FADE_MS);
 }
-async function moveChildBehindDoor(person,doorIndex,palette){
+async function moveChildBehindDoor(person,doorIndex,palette=MAGIC_DUST){
   await hidePerson(person,palette);
   await showBehindDoor(person,doorIndex,palette);
 }
@@ -372,17 +392,17 @@ async function handleChoice(door,i){
   const currentStep=step;
   assigned[currentStep]=i;
   refreshDoors();
-  spawnDoorDust(door,42);
+  spawnDoorDust(door,84);
   await afterDoorOpens(door);
 
-  if(currentStep===1) await moveChildBehindDoor(boy,i,BOY_DUST);
-  if(currentStep===2) await moveChildBehindDoor(girl,i,GIRL_DUST);
+  if(currentStep===1) await moveChildBehindDoor(boy,i,MAGIC_DUST);
+  if(currentStep===2) await moveChildBehindDoor(girl,i,MAGIC_DUST);
 
   if(currentStep<2){
     await wait(BETWEEN_MS);
     step=currentStep+1;
-    if(step===1) await showPerson(boy,BOY_DUST);
-    if(step===2) await showPerson(girl,GIRL_DUST);
+    if(step===1) await showPerson(boy,MAGIC_DUST);
+    if(step===2) await showPerson(girl,MAGIC_DUST);
   }else{
     step=3;
   }
@@ -390,7 +410,17 @@ async function handleChoice(door,i){
   refreshDoors();
 }
 
-doors.forEach((door,i)=>door.addEventListener('click',()=>handleChoice(door,i)));
+doors.forEach((door,i)=>{
+  door.addEventListener('click',()=>handleChoice(door,i));
+  door.addEventListener('mouseenter',()=>{
+    if(door.disabled) return;
+    const now=performance.now();
+    const last=lastHoverAt.get(door)||0;
+    if(now-last<180) return;
+    lastHoverAt.set(door,now);
+    spawnDoorDust(door,18);
+  });
+});
 refreshDoors();
 </script>
 </body>
