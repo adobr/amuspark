@@ -42,45 +42,52 @@ body{min-height:100vh;margin:0;overflow:hidden;display:grid;place-items:center;b
 
 .doors{
   position:absolute;
-  left:19%; right:19%; top:24%;
-  height:48%;
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:.6%;
-  align-items:end;
+  left:5%; right:5%; top:5%;
+  display:flex;
+  justify-content:center;
+  align-items:flex-start;
 }
 .door-wrap{
   position:relative;
-  height:100%;
-  display:flex;
-  align-items:end;
-  justify-content:center;
-  transform:scale(1.5);
-  transform-origin:center bottom;
+  flex:0 0 35%;
+  width:35%;
+  aspect-ratio:1122 / 1402;
 }
-.door-wrap::after{content:"";position:absolute;inset:0;background:url('assets/door-frame.png') center bottom/contain no-repeat;pointer-events:none;z-index:3}
+.door-wrap + .door-wrap{margin-left:-10.5%}
+.door-wrap::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:url('assets/door-frame.png') center/100% 100% no-repeat;
+  pointer-events:none;
+  z-index:3;
+  opacity:1;
+}
 .vines{display:none;display:none}
 .door{
-  position:relative;
-  width:83.64%;
-  height:auto;
-  aspect-ratio:1122 / 1402;
-  margin-bottom:10%;
+  position:absolute;
+  left:22.2%;
+  top:12.4%;
+  width:55.6%;
+  height:71.5%;
+  margin:0;
+  padding:0;
   border:0;
-  border-radius:48% 48% 7% 7% / 25% 25% 4% 4%;
-  background:transparent url('assets/door-panel.png') center bottom/contain no-repeat;
+  border-radius:48% 48% 5% 5% / 24% 24% 3% 3%;
+  background:transparent url('assets/door-panel.png') center/100% 100% no-repeat;
   box-shadow:none;
   cursor:pointer;
-  transform-origin:16% 55%;
+  transform-origin:0 50%;
   transition:transform .6s ease, filter .2s, box-shadow .2s;
   z-index:2;
 }
 .door::before{
   content:"";
   position:absolute;
-  inset:5% 6% 5%;
-  border:4px solid var(--mustard);
-  border-radius:46% 46% 5% 5% / 23% 23% 4% 4%;
+  inset:0;
+  box-sizing:border-box;
+  border:10px solid var(--mustard);
+  border-radius:48% 48% 5% 5% / 24% 24% 3% 3%;
   opacity:0;
   pointer-events:none;
   transition:opacity .2s ease;
@@ -106,26 +113,33 @@ body{min-height:100vh;margin:0;overflow:hidden;display:grid;place-items:center;b
 }
 .door > .sign img{display:block;width:100%;height:100%;object-fit:contain}
 
-.recipient{position:absolute;left:1%;bottom:1%;width:28.8%;height:79.2%;display:flex;align-items:flex-end;justify-content:flex-start;pointer-events:none;z-index:10}
+.recipient{position:absolute;left:0;bottom:5%;width:14%;height:48%;display:flex;align-items:flex-end;justify-content:flex-start;pointer-events:none;z-index:10}
 .recipient img{height:100%;width:auto;display:block;object-fit:contain;transform:scaleX(-1);transform-origin:center;filter:drop-shadow(0 4px 6px rgba(0,0,0,.08))}
 
 .people{
-  position:absolute;left:31%;right:31%;bottom:1%;height:55.44%;
+  position:absolute;left:5%;right:2%;bottom:5%;height:36%;
   pointer-events:none;z-index:20;
 }
 .person{
-  height:100%;width:auto;position:absolute;left:50%;bottom:0;display:flex;align-items:flex-end;justify-content:center;
-  transform:translateX(-50%);
-  opacity:0;visibility:hidden;transition:transform .5s ease,filter .2s,opacity .5s ease,visibility 0s linear .5s;
+  height:100%;width:auto;position:absolute;bottom:0;display:flex;align-items:flex-end;justify-content:center;
+  opacity:0;visibility:hidden;
+  transition:left .5s ease, transform .5s ease, opacity .5s ease, visibility 0s linear .5s, filter .2s;
 }
 .person img{width:auto;height:100%;object-fit:contain;object-position:bottom center;display:block;filter:drop-shadow(0 4px 6px rgba(0,0,0,.08))}
-.person.visible{opacity:1;visibility:visible;transition:transform .5s ease,opacity .5s ease,visibility 0s linear 0s}
+.person.waiting{opacity:1;visibility:visible;transition:left .5s ease, transform .5s ease, opacity .5s ease, visibility 0s linear 0s}
+.person.boy.waiting{left:89%;transform:translateX(-100%)}
+.person.girl.waiting{left:99%;transform:translateX(-100%)}
+.person.active-center{left:50%;transform:translateX(-50%);opacity:1;visibility:visible;transition:left .5s ease, transform .5s ease, opacity .5s ease, visibility 0s linear 0s}
 .person.leaving{opacity:0;transform:translateX(-50%) translateY(-6%) scale(.97);filter:none}
 
 @media(max-width:760px){
-  .doors{left:11%;right:11%;top:23%;height:46%;gap:.6%}
-  .recipient{left:1%;bottom:1%;width:30.6%;height:75.6%}
-  .people{left:29%;right:29%;bottom:1%;height:52.92%}
+  .doors{left:3%;right:3%;top:6%}
+  .door-wrap{flex-basis:35%;width:35%}
+  .door-wrap + .door-wrap{margin-left:-10.5%}
+  .recipient{left:0;bottom:5%;width:18%;height:44%}
+  .people{left:4%;right:1%;bottom:5%;height:32%}
+  .person.boy.waiting{left:86%;transform:translateX(-100%)}
+  .person.girl.waiting{left:98%;transform:translateX(-100%)}
   .person{min-width:56px}
 }
 </style>
@@ -386,13 +400,10 @@ function setActive(person,on){person?.classList.toggle('active',!!on)}
 
 async function showPerson(person){
   if(!person)return;
-  person.classList.remove('leaving');
+  person.classList.remove('leaving','waiting');
   setActive(person,true);
-  person.style.transition='none';
-  person.classList.add('visible');
-  // Force the visible state immediately, without magic/fade-in.
-  person.offsetHeight;
-  person.style.transition='';
+  person.classList.add('active-center');
+  await wait(FADE_MS);
 }
 async function hidePerson(person,palette=MAGIC_DUST){
   if(!person)return;
@@ -400,7 +411,7 @@ async function hidePerson(person,palette=MAGIC_DUST){
   spawnDisappearanceStars(person,palette,115,FADE_MS);
   person.classList.add('leaving');
   await wait(FADE_MS);
-  person.classList.remove('visible','leaving');
+  person.classList.remove('active-center','leaving','waiting');
 }
 
 function afterDoorOpens(door){
@@ -459,6 +470,8 @@ doors.forEach((door,i)=>{
     spawnDoorDust(door,18);
   });
 });
+boy.classList.add('waiting');
+girl.classList.add('waiting');
 refreshDoors();
 </script>
 </body>
