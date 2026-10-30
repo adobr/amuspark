@@ -77,7 +77,8 @@
     </g>
     <g id="outerContour" pointer-events="none" aria-hidden="true"></g>
     <!-- Cardboard side walls belong only to the raised picture pieces. -->
-    <g id="pieceDepth" clip-path="url(#boardClip)" pointer-events="none"></g>
+    <!-- Raised side walls extend beyond the right and bottom board edges. -->
+    <g id="pieceDepth" pointer-events="none"></g>
     <!-- Fitted pieces live above the tray so hover scaling and strokes are never clipped. -->
     <g id="pieces"></g>
     <g id="assembledEdges" pointer-events="none" aria-hidden="true"></g>
@@ -126,6 +127,10 @@
   }
   // Flat kraft backing. Only the picture pieces extend down/right in depth.
   const depth=6;
+  // Anchor the bottom footprint to the printed slots. The top surface sits
+  // one cardboard depth above/left; the side extrusion ends at the slot edge.
+  const raisedOffset=`translate(${-depth} ${-depth})`;
+  for(const layer of [pieces,pieceDepth,assembledEdges])layer.setAttribute('transform',raisedOffset);
   const floorTransform='translate(0 0)';
   function trayPath(inset=0){
     const x=config.x,y=config.y,r=15;
