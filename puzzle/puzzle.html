@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f5e8c9">
+<title>Картонный пазл</title>
+<style>
+  :root { --cardboard: #e5d8c5; --selection: #c2a163; --line: #876b4e; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+  body { background: #f5e8c9 url('assets/background.jpg') center / cover; }
+  main { position: relative; width: 100%; height: 100%; display: grid; place-items: center; }
+  svg { display: block; width: 100%; height: 100%; touch-action: manipulation; }
+  .seam-base, .seam-core, .seam-light { fill: none; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+  .seam-base { stroke: #c3ae90; stroke-width: 5; }
+  .seam-core { stroke: #8e7557; stroke-width: 2.3; }
+  .seam-light { stroke: #f8ecda; stroke-width: 1.6; }
+  /* Only the empty floor gets the softer pressed groove profile. */
+  #guides .seam-base, #outerContour .seam-base { stroke: #bda688; stroke-width: 4.6; opacity: .4; filter: url(#grooveSoft); }
+  #guides .seam-core, #outerContour .seam-core { stroke: #9c8061; stroke-width: 2.6; opacity: .9; filter: url(#grooveCore); }
+  #guides .seam-light, #outerContour .seam-light { display: none; }
+  .active-fill { fill: transparent; stroke: none; pointer-events: all; }
+  .piece[role=button] {
+    cursor: pointer; outline: none; transform-box: view-box;
+    transition: filter .18s ease;
+  }
+  .piece[role=button]:hover, .piece[role=button]:focus-visible { filter: brightness(1.18); }
+  .piece[role=button]:active { opacity: .94; }
+  .reveal-overlay { position: fixed; inset: 0; z-index: 30; touch-action: none; }
+  .magic-canvas { z-index: 40; position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  @media (prefers-reduced-motion: reduce) {
+    .piece[role=button] { transition: none; }
+    .particle { animation: none; }
+      .piece[role=button]:hover, .piece[role=button]:focus-visible { transform: none; }
+  }
+</style>
+</head>
+<body>
+<main aria-label="Пазл из двенадцати деталей">
+  <svg id="puzzle" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Картонный пазл" aria-describedby="desc">
+    <desc id="desc">Ни одной детали пока не собрано. Нажмите на светлую деталь в сепии, чтобы собрать её и перейти к следующей.</desc>
+    <defs>
+      <filter id="pieceContactShadow" x="-8%" y="-12%" width="116%" height="124%" color-interpolation-filters="sRGB">
+        <feGaussianBlur stdDeviation="1.3"/>
+      </filter>
+      <pattern id="kraftSides" width="420" height="236.25" patternUnits="userSpaceOnUse">
+        <image href="assets/kraft-sides.jpg" width="420" height="236.25" preserveAspectRatio="xMidYMid slice"/>
+      </pattern>
+      <filter id="grooveSoft" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation=".85"/></filter>
+      <filter id="grooveCore" x="-10%" y="-10%" width="120%" height="120%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation=".4"/></filter>
+      <filter id="rimContactSoft" x="-5%" y="-5%" width="110%" height="110%"><feGaussianBlur stdDeviation=".6"/></filter>
+      <pattern id="cutCardboard" width="210" height="210" patternUnits="userSpaceOnUse">
+        <image href="assets/cardboard.jpg" width="210" height="210" preserveAspectRatio="xMidYMid slice"/>
+      </pattern>
+      <pattern id="paper" width="200" height="200" patternUnits="userSpaceOnUse">
+        <rect width="200" height="200" fill="#e5d8c5"/>
+        <rect width="200" height="200" fill="#b69f80" opacity=".07" filter="url(#grain)"/>
+      </pattern>
+      <filter id="grain" x="0" y="0" width="100%" height="100%">
+        <feTurbulence type="fractalNoise" baseFrequency=".65" numOctaves="3" stitchTiles="stitch"/>
+        <feColorMatrix type="saturate" values="0"/>
+      </filter>
+      <filter id="sepia" color-interpolation-filters="sRGB">
+        <!-- Warmer amber sepia: red luminance, 78% green, 45% blue; no white blend. -->
+        <feColorMatrix type="matrix" values=".30 .59 .11 0 0 .234 .4602 .0858 0 0 .135 .2655 .0495 0 0 0 0 0 1 0"/>
+      </filter>
+      <clipPath id="boardClip"><rect x="72" y="88" width="1456" height="724" rx="15"/></clipPath>
+      <image id="meadow" href="assets/scene-forest.jpg" width="1" height="1"/>
+      <image id="scene-1" href="assets/scene-cafe.jpg" width="1" height="1"/>
+      <image id="scene-2" href="assets/scene-aquarium.jpg" width="1" height="1"/>
+      <image id="scene-3" href="assets/scene-waterpark.jpg" width="1" height="1"/>
+      <image id="scene-4" href="assets/scene-theatre.jpg" width="1" height="1"/>
+    </defs>
+    <g clip-path="url(#boardClip)">
+      <g id="activeSlot"></g>
+      <g id="guides" pointer-events="none"></g>
+      <g id="rimWalls" pointer-events="none"></g>
+    </g>
+    <g id="outerContour" pointer-events="none" aria-hidden="true"></g>
+    <!-- Cardboard side walls belong only to the raised picture pieces. -->
+    <!-- Raised side walls extend beyond the right and bottom board edges. -->
+    <g id="pieceDepth" pointer-events="none"></g>
+    <!-- Fitted pieces live above the tray so hover scaling and strokes are never clipped. -->
+    <g id="pieces"></g>
+    <g id="assembledEdges" pointer-events="none" aria-hidden="true"></g>
+  </svg>
+  <canvas class="magic-canvas" id="magicCanvas" aria-hidden="true"></canvas>
+  <p class="sr-only" id="status" role="status" aria-live="polite"></p>
+</main>
+<script>
+(() => {
+  'use strict';
+  const NS = 'http://www.w3.org/2000/svg';
+  const config = { columns: 4, rows: 3, completed: 0, x: 72, y: 88, width: 1456, height: 724 };
+  let completed = config.completed;
+  const total = config.columns * config.rows;
+  function shuffleOrder(){
+    const result=Array.from({length:total},(_,i)=>i);
+    for(let i=result.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [result[i],result[j]]=[result[j],result[i]];
+    }
+    return result;
+  }
+  let order=shuffleOrder();
+  const w = config.width / config.columns, h = config.height / config.rows;
+  const defs = document.querySelector('defs');
+  const pieces = document.getElementById('pieces');
+  const assembledEdges = document.getElementById('assembledEdges');
+  const pieceDepth = document.getElementById('pieceDepth');
+  const guides = document.getElementById('guides');
+  const activeSlot = document.getElementById('activeSlot');
+  const imageSources=['meadow','scene-1','scene-2','scene-3','scene-4'].map(id=>document.getElementById(id).getAttribute('href'));
+  function mixImages(){
+    const offset=Math.floor(Math.random()*imageSources.length);
+    const result=Array.from({length:total},(_,i)=>(i+offset)%imageSources.length);
+    for(let i=result.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [result[i],result[j]]=[result[j],result[i]];
+    }
+    return result;
+  }
+  let imageAssignments=mixImages();
+  function el(tag, attrs = {}) {
+    const element = document.createElementNS(NS, tag);
+    Object.entries(attrs).forEach(([k,v]) => element.setAttribute(k, v));
+    return element;
+  }
+  // Flat kraft backing. Only the picture pieces extend down/right in depth.
+  const depth=6;
+  // Anchor the bottom footprint to the printed slots. The top surface sits
+  // one cardboard depth above/left; the side extrusion ends at the slot edge.
+  const raisedOffset=`translate(${-depth} ${-depth})`;
+  for(const layer of [pieces,pieceDepth,assembledEdges])layer.setAttribute('transform',raisedOffset);
+  const floorTransform='translate(0 0)';
+  function trayPath(inset=0){
+    const x=config.x,y=config.y,r=15;
+    const right=x+config.width-inset,bottom=y+config.height-inset;
+    return `M${x+r},${y} H${right-r} Q${right},${y} ${right},${y+r} V${bottom-r} Q${right},${bottom} ${right-r},${bottom} H${x+r} Q${x},${bottom} ${x},${bottom-r} V${y+r} Q${x},${y} ${x+r},${y} Z`;
+  }
+  const wallCache=new Map();
+  function cardboardWalls(d,roundedProfile=false){
+    if(wallCache.has(d))return wallCache.get(d);
+    const g=el('g',{'aria-hidden':'true'});
+    const colours=['#dfc7a4','#cbb08b','#b49670','#a18460','#937650','#806342'];
+    if(roundedProfile){
+      // Six continuous rounded bands, rather than thousands of tiny quads.
+      g.append(el('path',{d:trayPath()+trayPath(depth),fill:'url(#cutCardboard)','fill-rule':'evenodd'}));
+      for(let i=0;i<6;i++)g.append(el('path',{
+        d:trayPath(i*depth/6)+trayPath((i+1)*depth/6),
+        fill:colours[i],'fill-opacity':.8,'fill-rule':'evenodd'
+      }));
+      const right=config.x+config.width-depth,bottom=config.y+config.height-depth;
+      g.append(el('path',{d:`M${config.x+15},${bottom} H${right-15} Q${right},${bottom} ${right},${bottom-15} V${config.y+15}`,
+        fill:'none',stroke:'#70583e','stroke-width':1,'stroke-opacity':.22,filter:'url(#rimContactSoft)'}));
+    }else{
+      // A contact shadow belongs to the same object as its cardboard sides.
+      g.append(el('path',{d,transform:`translate(${depth+1} ${depth+1})`,fill:'#49331f','fill-opacity':.18,filter:'url(#pieceContactShadow)'}));
+      // The same kraft fibres as the background, with a darker side profile.
+      for(let offset=depth;offset>=1;offset--){
+        const transform=`translate(${offset} ${offset})`;
+        g.append(el('path',{d,transform,fill:'url(#kraftSides)'}));
+        g.append(el('path',{d,transform,fill:'#49331f','fill-opacity':.20+.035*offset}));
+      }
+    }
+    wallCache.set(d,g);
+    return g;
+  }
+  const rimPath=trayPath();
+  // The kraft sheet is flat; only the picture pieces have side walls.
+  guides.setAttribute('transform',floorTransform);
+  activeSlot.setAttribute('transform',floorTransform);
+  // One shared floor coordinate system for fill and seam geometry.
+  const seamBase=el('g'),seamCore=el('g'),seamLight=el('g',{transform:'translate(1.5 1.5)'});
+  guides.append(seamBase,seamCore,seamLight);
+  function addSeam(d){
+    seamBase.append(el('path',{d,class:'seam-base'}));
+    seamCore.append(el('path',{d,class:'seam-core'}));
+    seamLight.append(el('path',{d,class:'seam-light'}));
+  }
+  const outerContour=document.getElementById('outerContour');
+  outerContour.append(
+    el('path',{d:trayPath(),class:'seam-base'}),
+    el('path',{d:trayPath(),class:'seam-core'})
+  );
+  // Shared cubic edges guarantee that adjoining jigsaw contours match exactly.
+  function edge(a, b, sign = 0) {
+    const dx=b[0]-a[0], dy=b[1]-a[1], length=Math.hypot(dx,dy);
+    const depth=31*sign;
+    const point=(t,n=0) => `${(a[0]+dx*t-dy/length*n).toFixed(2)},${(a[1]+dy*t+dx/length*n).toFixed(2)}`;
+    if (!sign) return `L${point(1)}`;
+    return `L${point(.39)} C${point(.47)} ${point(.42,depth*.48)} ${point(.42,depth*.74)} C${point(.42,depth*1.35)} ${point(.58,depth*1.35)} ${point(.58,depth*.74)} C${point(.58,depth*.48)} ${point(.53)} ${point(.61)} L${point(1)}`;
+  }
+  const horizontal = (r,c) => ((r+c)%2 ? 1 : -1);
+  const vertical = (r,c) => ((r+c)%2 ? -1 : 1);
+  const cells=[];
+  for(let r=0;r<config.rows;r++) for(let c=0;c<config.columns;c++) {
+    const x=config.x+c*w,y=config.y+r*h;
+    const a=[x,y],b=[x+w,y],d=[x,y+h],e=[x+w,y+h];
+    // Round the actual silhouette, including the picture and outline, rather than
+    // clipping the whole piece layer (which would cut off hover and particles).
+    const radius=15;
+    const trim=(segment,end)=>segment.replace(/L[-\d.,]+$/,`L${end}`);
+    let top=edge(a,b,r?horizontal(r,c):0);
+    let right=edge(b,e,c<3?vertical(r,c+1):0);
+    let bottom=edge(e,d,r<2?-horizontal(r+1,c):0);
+    let left=edge(d,a,c?-vertical(r,c):0);
+    if(r===0&&c===3) top=trim(top,[x+w-radius,y])+` Q${b} ${x+w},${y+radius}`;
+    if(r===2&&c===3) right=trim(right,[x+w,y+h-radius])+` Q${e} ${x+w-radius},${y+h}`;
+    if(r===2&&c===0) bottom=trim(bottom,[x+radius,y+h])+` Q${d} ${x},${y+h-radius}`;
+    if(r===0&&c===0) left=trim(left,[x,y+radius])+` Q${a} ${x+radius},${y}`;
+    const start=r===0&&c===0?[x+radius,y]:a;
+    const path=`M${start} ${top} ${right} ${bottom} ${left} Z`;
+    const id=cells.length;
+    const clip=el('clipPath',{id:`cell-${id}`}); clip.append(el('path',{d:path})); defs.append(clip);
+    cells.push({x,y,path});
+  }
+  // These paths have no shadow or relief: all empty locations share one floor.
+  for(let r=1;r<3;r++) for(let c=0;c<4;c++) {
+    const a=[config.x+c*w,config.y+r*h], b=[a[0]+w,a[1]];
+    addSeam(`M${a} ${edge(a,b,horizontal(r,c))}`);
+  }
+  for(let c=1;c<4;c++) for(let r=0;r<3;r++) {
+    const a=[config.x+c*w,config.y+r*h],b=[a[0],a[1]+h];
+    addSeam(`M${a} ${edge(a,b,vertical(r,c))}`);
+  }
+  // Canvas dust adapted from the supplied doors example: soft dots and
+  // rotating four-point stars, without outlines. Use elapsed time for all motion.
+  const canvas=document.getElementById('magicCanvas');
+  const ctx=canvas.getContext('2d');
+  const dust=[];
+  const motion=matchMedia('(prefers-reduced-motion: reduce)');
+  let cw=0,ch=0,last=0;
+  let busy=false,clickTimer=null,orbit=null,reveal=null;
+  const dustPalette=['#7E7B5E','#A26045','#BE8568','#C2A163','#526867'];
+  let dustColourIndex=0;
+  function resizeDust(){
+    const rect=canvas.parentElement.getBoundingClientRect();
+    const dpr=Math.min(2,devicePixelRatio||1);
+    cw=rect.width;ch=rect.height;
+    canvas.width=Math.round(cw*dpr);canvas.height=Math.round(ch*dpr);
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  new ResizeObserver(resizeDust).observe(canvas.parentElement);
+  resizeDust();
+  function prepareOrbit(group,cell){
+    orbit={group,cx:cell.x+w/2,cy:cell.y+h/2};
+    if(motion.matches)return;
+    for(let i=0;i<64;i++)dust.push({phase:i/64,speed:.035+Math.random()*.025,
+      rx:w*(.45+Math.random()*.34),ry:h*(.48+Math.random()*.42),twinkle:Math.random()*Math.PI*2,
+      color:dustPalette[dustColourIndex++%dustPalette.length],
+      life:1e9,age:160,size:1.1+Math.random()*2.3,
+      alpha:1,rot:Math.random()*Math.PI*2,
+      vr:(Math.random()-.5)*.06,spark:Math.random()>.8});
+  }
+  function activate(){
+    if(busy||completed>=total)return;
+    if(motion.matches){advance();return;}
+    const active=orbit?.group;
+    const start=active?.getScreenCTM();
+    if(!start)return;
+    busy=true;
+    active.setAttribute('aria-busy','true');
+    const index=order[completed],cell=cells[index];
+    const overlay=el('svg',{class:'reveal-overlay',viewBox:`0 0 ${cw} ${ch}`,preserveAspectRatio:'none','aria-hidden':'true'});
+    const moving=el('g');
+    const imageAttrs={href:imageSources[imageAssignments[index]],x:cell.x-52,y:cell.y-52,width:w+104,height:h+104,preserveAspectRatio:'xMidYMid slice','clip-path':`url(#cell-${index})`};
+    const sepia=el('image',{...imageAttrs,filter:'url(#sepia)'});
+    const colour=el('image',{...imageAttrs,opacity:0});
+    const movingWall=active._pieceWall.cloneNode(true);
+    const movingEdge=active._pieceEdge.cloneNode(true);
+    moving.append(movingWall,sepia,colour,movingEdge);overlay.append(moving);
+    document.querySelector('main').append(overlay);
+    // Screen coordinates avoid transform-origin and letterboxing offsets.
+    const from={a:start.a,d:start.d,e:start.e,f:start.f};
+    const scale=Math.max(cw/(w*.66),ch/(h*.66));
+    const target={a:scale,d:scale,e:cw/2-(cell.x+w/2)*scale,f:ch/2-(cell.y+h/2)*scale};
+    const apply=(t,squeeze=1)=>{
+      const a=from.a+(target.a-from.a)*t,d=from.d+(target.d-from.d)*t;
+      const e=from.e+(target.e-from.e)*t,f=from.f+(target.f-from.f)*t;
+      // Squeeze around the piece centre, without shifting its position.
+      moving.setAttribute('transform',`matrix(${a*squeeze} 0 0 ${d*squeeze} ${e+a*(cell.x+w/2)*(1-squeeze)} ${f+d*(cell.y+h/2)*(1-squeeze)})`);
+    };
+    apply(0);
+    const originals=[active,active._pieceWall,active._pieceEdge];
+    for(const original of originals)original.style.visibility='hidden';
+    orbit.group=moving;
+    reveal={overlay,active,originals,frame:null};
+    const state=reveal;
+    const started=performance.now();
+    // Exact CSS cubic-bezier(0.34, 1.56, 0.64, 1), evaluated for SVG matrices.
+    const easeOutBack=t=>{
+      if(t<=0)return 0;if(t>=1)return 1;
+      const bezier=(u,p1,p2)=>3*(1-u)*(1-u)*u*p1+3*(1-u)*u*u*p2+u*u*u;
+      let lo=0,hi=1;
+      for(let i=0;i<20;i++){
+        const u=(lo+hi)/2;
+        if(bezier(u,.34,.64)<t)lo=u;else hi=u;
+      }
+      return bezier((lo+hi)/2,1.56,1);
+    };
+    const frame=now=>{
+      if(reveal!==state)return;
+      const t=now-started;
+      // One CSS-style overshoot for each movement, without extra sine bounces.
+      if(t<120)apply(0);
+      else if(t<1020){
+        // Time-reversed return: local anticipation squeeze, then full expansion.
+        const progress=easeOutBack(1-(t-120)/900);
+        if(progress<=1)apply(1-progress);
+        else apply(0,2-progress);
+      }
+      else if(t<1500){
+        apply(1);
+        colour.setAttribute('opacity',Math.min(1,(t-1020)/420));
+      }else if(t<2400){
+        colour.setAttribute('opacity',1);
+        const progress=easeOutBack((t-1500)/900);
+        // Apply the small final overshoot relative to the local piece size,
+        // so tall mobile viewports do not amplify it into a large squash.
+        if(progress<=1)apply(1-progress);
+        else apply(0,2-progress);
+      }else{
+        colour.setAttribute('opacity',1);apply(0);
+        advance();return;
+      }
+      state.frame=requestAnimationFrame(frame);
+    };
+    state.frame=requestAnimationFrame(frame);
+  }
+  function cancelActivation(){
+    if(clickTimer!==null)clearTimeout(clickTimer);
+    if(reveal){
+      cancelAnimationFrame(reveal.frame);
+      for(const original of reveal.originals)original.style.visibility='';
+      reveal.overlay.remove();reveal=null;
+    }
+    clickTimer=null;busy=false;
+  }
+  function dustFrame(now){
+    const dt=last?Math.min(32,now-last):16;last=now;
+    ctx.clearRect(0,0,cw,ch);
+    if(motion.matches){dust.length=0;}
+    else{
+      const matrix=orbit?.group.getScreenCTM();
+      const bounds=canvas.getBoundingClientRect();
+      for(let i=dust.length-1;i>=0;i--){
+        const p=dust[i];
+        if(!matrix||!orbit)continue;
+        const speed=busy?4:1;
+        p.phase=(p.phase+p.speed*dt/1000*speed)%1;
+        // Broad elliptical cloud with independent radii, not a contour trace.
+        const angle=p.phase*Math.PI*2;
+        const wander=Math.sin(now/800+p.twinkle)*9;
+        const x=orbit.cx+Math.cos(angle)*(p.rx+wander);
+        const y=orbit.cy+Math.sin(angle)*(p.ry+wander*.7);
+        p.x=matrix.a*x+matrix.c*y+matrix.e-bounds.left;
+        p.y=matrix.b*x+matrix.d*y+matrix.f-bounds.top;
+        p.rot+=p.vr*dt/16*speed;
+        p.age+=dt;
+        ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.rot);
+        ctx.globalAlpha=1;
+        ctx.shadowBlur=6+p.size*2.5;ctx.shadowColor=p.color;ctx.fillStyle=p.color;
+        ctx.beginPath();
+        if(p.spark){
+          const s=p.size*1.7;
+          ctx.moveTo(0,-s*2);ctx.lineTo(s*.5,-s*.45);ctx.lineTo(s*2,0);ctx.lineTo(s*.5,s*.45);
+          ctx.lineTo(0,s*2);ctx.lineTo(-s*.5,s*.45);ctx.lineTo(-s*2,0);ctx.lineTo(-s*.5,-s*.45);ctx.closePath();
+        }else ctx.arc(0,0,p.size,0,Math.PI*2);
+        ctx.fill();ctx.restore();
+      }
+    }
+    requestAnimationFrame(dustFrame);
+  }
+  const fittedCache=new Map();
+  function render(restoreFocus=false) {
+    dust.length=0;orbit=null;
+    pieces.replaceChildren();
+    assembledEdges.replaceChildren();
+    activeSlot.replaceChildren();
+    pieceDepth.replaceChildren();
+    cells.forEach((cell,index) => {
+      const rank=order.indexOf(index);
+      if(rank>completed)return;
+      const active=rank===completed;
+      if(active && completed===total)return;
+      if(!active && fittedCache.has(index)){
+        const cached=fittedCache.get(index);
+        pieces.append(cached.face);pieceDepth.append(cached.wall);assembledEdges.append(cached.edge);
+        return;
+      }
+      const group=el('g',{class:'piece', 'data-index':index});
+      const wall=cardboardWalls(cell.path);
+      if(wall)pieceDepth.append(wall);
+      group._pieceWall=wall;
+      // Each piece repeats the supplied picture; the image is clipped in SVG.
+      const image=el('image',{
+        href:imageSources[imageAssignments[index]],x:cell.x-52,y:cell.y-52,width:w+104,height:h+104,
+        preserveAspectRatio:'xMidYMid slice','clip-path':`url(#cell-${index})`
+      });
+      if(active)image.setAttribute('filter','url(#sepia)');
+      {
+        group.append(image);
+        // Match the recessed seam colours and width on the fitted face.
+        // Clipping keeps the lip inside its cardboard silhouette; a separate
+        // top layer prevents neighbouring images from covering these edges.
+        const edge=el('g',{'clip-path':`url(#cell-${index})`});
+        edge.append(
+          el('path',{d:cell.path,class:'seam-base'}),
+          el('path',{d:cell.path,class:'seam-core',transform:'translate(-.5 -.5)'}),
+          el('path',{d:cell.path,class:'seam-light',transform:'translate(1.5 1.5)'})
+        );
+        // Cream only along the top outside edge; retain all internal fitted seams.
+        if(index<config.columns){
+          edge.append(el('path',{d:`M${cell.x},${cell.y+1.5} H${cell.x+w}`,fill:'none',stroke:'#e4d1b0','stroke-width':3,'stroke-linecap':'round'}));
+        }
+        assembledEdges.append(edge);
+        group._pieceEdge=edge;
+        if(!active)fittedCache.set(index,{face:group,wall,edge});
+      }
+      if(active) {
+        group.setAttribute('role','button'); group.setAttribute('tabindex','0');
+        group.setAttribute('aria-label',`Собрать деталь ${index+1} из ${total}`);
+        group.append(el('path',{d:cell.path,class:'active-fill'}));
+        group.addEventListener('click',activate);
+        group.addEventListener('keydown',event=>{
+          if(event.key==='Enter'||event.key===' ') {event.preventDefault();activate();}
+        });
+      } else {
+        group.setAttribute('role','img');
+        group.setAttribute('aria-label',`Деталь ${index+1} собрана`);
+      }
+      pieces.append(group);
+      if(active)prepareOrbit(group,cell);
+    });
+    document.getElementById('status').textContent = completed===total ? 'Все 12 деталей собраны.' : `Собрано ${completed} из 12. Активна деталь ${order[completed]+1}.`;
+    if(restoreFocus) document.getElementById('puzzle').querySelector('[role=button]')?.focus();
+  }
+  function advance() {
+    if(completed>=total) return;
+    cancelActivation();
+    const index=order[completed];
+    completed++;
+    render(true);
+    document.getElementById('puzzle').dispatchEvent(new CustomEvent('puzzle:complete',{detail:{index,completed,total},bubbles:true}));
+  }
+  // Integration API: call completeActive() after a child finishes a real task.
+  window.puzzle = {
+    completeActive: advance,
+    reset() { cancelActivation(); order=shuffleOrder(); imageAssignments=mixImages(); fittedCache.clear(); completed=config.completed; render(); },
+    setCompleted(count) { if(!Number.isInteger(count)||count<0||count>total) throw new RangeError('Expected an integer from 0 to 12'); cancelActivation(); completed=count; render(); },
+    get completed() { return completed; }
+  };
+  render();
+  requestAnimationFrame(dustFrame);
+})();
+</script>
+</body>
+</html>
